@@ -44,20 +44,21 @@ We will use Architecture Decision Records, as [described by Michael Nygard](http
 See Michael Nygard's article, linked above. For a lightweight ADR toolset, see Nat Pryce's [adr-tools](https://github.com/npryce/adr-tools).
 `
 
-func ResolveTemplate(adrAbsDir string) string {
+func ResolveTemplate(adrAbsDir string) (string, error) {
 	if envTpl := os.Getenv("ADR_TEMPLATE"); envTpl != "" {
 		data, err := os.ReadFile(envTpl)
-		if err == nil {
-			return string(data)
+		if err != nil {
+			return "", fmt.Errorf("read ADR_TEMPLATE %q: %w", envTpl, err)
 		}
+		return string(data), nil
 	}
 
 	repoTpl := filepath.Join(adrAbsDir, "templates", "template.md")
 	if data, err := os.ReadFile(repoTpl); err == nil {
-		return string(data)
+		return string(data), nil
 	}
 
-	return DefaultTemplate
+	return DefaultTemplate, nil
 }
 
 func ApplyTemplate(template string, number int, title, date, status string) string {

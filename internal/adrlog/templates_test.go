@@ -11,7 +11,10 @@ import (
 
 func TestResolveTemplateDefault(t *testing.T) {
 	dir := t.TempDir()
-	got := adrlog.ResolveTemplate(dir)
+	got, err := adrlog.ResolveTemplate(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if got != adrlog.DefaultTemplate {
 		t.Errorf("expected default template, got %q", got)
 	}
@@ -27,7 +30,10 @@ func TestResolveTemplateFromRepo(t *testing.T) {
 	custom := "# NUMBER. TITLE\n\nCustom template\n"
 	testutil.WriteFile(t, filepath.Join(tplDir, "template.md"), custom)
 
-	got := adrlog.ResolveTemplate(dir)
+	got, err := adrlog.ResolveTemplate(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if got != custom {
 		t.Errorf("expected custom template, got %q", got)
 	}
@@ -41,7 +47,10 @@ func TestResolveTemplateFromEnv(t *testing.T) {
 
 	t.Setenv("ADR_TEMPLATE", envTpl)
 
-	got := adrlog.ResolveTemplate(dir)
+	got, err := adrlog.ResolveTemplate(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if got != custom {
 		t.Errorf("expected env template, got %q", got)
 	}
@@ -61,9 +70,22 @@ func TestResolveTemplateEnvTakesPrecedence(t *testing.T) {
 
 	t.Setenv("ADR_TEMPLATE", envTpl)
 
-	got := adrlog.ResolveTemplate(dir)
+	got, err := adrlog.ResolveTemplate(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if got != "env template" {
 		t.Errorf("expected env template to take precedence, got %q", got)
+	}
+}
+
+func TestResolveTemplateReturnsErrorForUnreadableEnvTemplate(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("ADR_TEMPLATE", filepath.Join(dir, "missing-template.md"))
+
+	_, err := adrlog.ResolveTemplate(dir)
+	if err == nil {
+		t.Fatal("expected unreadable ADR_TEMPLATE to return an error")
 	}
 }
 

@@ -87,7 +87,10 @@ func (r *Repository) CreateADR(opts CreateOptions) (string, error) {
 		}
 	}
 
-	template := ResolveTemplate(absDir)
+	template, err := ResolveTemplate(absDir)
+	if err != nil {
+		return "", err
+	}
 	content := ApplyTemplate(template, number, opts.Title, date, "Accepted")
 
 	filename := r.GenerateFilename(number, opts.Title)

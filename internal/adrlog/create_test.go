@@ -151,6 +151,27 @@ func TestCreateADRWithADRDateEnv(t *testing.T) {
 	}
 }
 
+func TestCreateADRFailsWhenADRTemplateCannotBeRead(t *testing.T) {
+	dir := testutil.TempRepoWithADRDir(t, "doc/adr")
+	t.Setenv("ADR_TEMPLATE", filepath.Join(dir, "missing-template.md"))
+
+	repo, err := adrlog.OpenRepository(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = repo.CreateADR(adrlog.CreateOptions{
+		Title: "Use PostgreSQL",
+	})
+	if err == nil {
+		t.Fatal("expected CreateADR to fail when ADR_TEMPLATE cannot be read")
+	}
+
+	if _, statErr := os.Stat(filepath.Join(dir, "doc/adr/0001-use-postgresql.md")); !os.IsNotExist(statErr) {
+		t.Fatalf("expected ADR file to not be created, got stat err %v", statErr)
+	}
+}
+
 func TestParseLinkSpec(t *testing.T) {
 	spec, err := adrlog.ParseLinkSpec("5:Amends:Amended by")
 	if err != nil {
