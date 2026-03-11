@@ -210,9 +210,25 @@ func TestLinkCommand(t *testing.T) {
 	dir := setupTestRepo(t)
 	chdir(t, dir)
 
-	_, err := executeCommand("link", "1", "2", "Relates to", "Relates to")
+	_, err := executeCommand("link", "2", "Clarifies", "1", "Clarified by")
 	if err != nil {
 		t.Fatalf("link failed: %v", err)
+	}
+
+	sourceContent, err := os.ReadFile(filepath.Join(dir, "doc/adr/0002-use-go-for-implementation.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(sourceContent), "Clarifies [1. Record architecture decisions](0001-record-architecture-decisions.md)") {
+		t.Fatalf("source ADR missing forward link:\n%s", string(sourceContent))
+	}
+
+	targetContent, err := os.ReadFile(filepath.Join(dir, "doc/adr/0001-record-architecture-decisions.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(targetContent), "Clarified by [2. Use Go for implementation](0002-use-go-for-implementation.md)") {
+		t.Fatalf("target ADR missing reverse link:\n%s", string(targetContent))
 	}
 }
 

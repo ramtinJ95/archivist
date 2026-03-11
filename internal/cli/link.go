@@ -9,7 +9,7 @@ import (
 )
 
 var linkCmd = &cobra.Command{
-	Use:   "link SOURCE TARGET FORWARD-LINK REVERSE-LINK",
+	Use:   "link SOURCE LINK TARGET REVERSE-LINK",
 	Short: "Create a link between two ADRs",
 	Args:  cobra.ExactArgs(4),
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -27,7 +27,7 @@ var linkCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		targetPath, err := repo.ResolveRef(args[1])
+		targetPath, err := repo.ResolveRef(args[2])
 		if err != nil {
 			return err
 		}
@@ -39,7 +39,7 @@ var linkCmd = &cobra.Command{
 			targetPath = filepath.Join(cwd, targetPath)
 		}
 
-		return adrlog.AddLink(sourcePath, targetPath, args[2], args[3])
+		return adrlog.AddLink(sourcePath, targetPath, args[1], args[3])
 	},
 }
 
