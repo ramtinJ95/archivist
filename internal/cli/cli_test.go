@@ -173,6 +173,35 @@ func TestGenerateTOCCommand(t *testing.T) {
 	}
 }
 
+func TestGenerateTOCCommandReadsIntroAndOutroFiles(t *testing.T) {
+	dir := setupTestRepo(t)
+	chdir(t, dir)
+
+	introPath := filepath.Join(dir, "intro.md")
+	outroPath := filepath.Join(dir, "outro.md")
+	if err := os.WriteFile(introPath, []byte("Intro text.\n\nMore intro.\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(outroPath, []byte("Outro text.\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := executeCommand("generate", "toc", "-i", introPath, "-o", outroPath)
+	if err != nil {
+		t.Fatalf("generate toc with intro/outro failed: %v", err)
+	}
+
+	if !strings.Contains(out, "Intro text.\n\nMore intro.") {
+		t.Fatalf("expected intro file contents in output, got %q", out)
+	}
+	if !strings.Contains(out, "Outro text.") {
+		t.Fatalf("expected outro file contents in output, got %q", out)
+	}
+	if strings.Contains(out, introPath) || strings.Contains(out, outroPath) {
+		t.Fatalf("expected TOC output to contain file contents, not file paths: %q", out)
+	}
+}
+
 func TestGenerateGraphCommand(t *testing.T) {
 	dir := setupTestRepo(t)
 	chdir(t, dir)

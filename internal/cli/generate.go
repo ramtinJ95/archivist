@@ -28,9 +28,18 @@ var generateTOCCmd = &cobra.Command{
 			return err
 		}
 
-		intro, _ := cmd.Flags().GetString("intro")
-		outro, _ := cmd.Flags().GetString("outro")
+		introPath, _ := cmd.Flags().GetString("intro")
+		outroPath, _ := cmd.Flags().GetString("outro")
 		linkPrefix, _ := cmd.Flags().GetString("link-prefix")
+
+		intro, err := readOptionalFile(introPath)
+		if err != nil {
+			return err
+		}
+		outro, err := readOptionalFile(outroPath)
+		if err != nil {
+			return err
+		}
 
 		toc, err := repo.GenerateTOC(adrlog.TOCOptions{
 			Intro:      intro,
@@ -78,8 +87,8 @@ var generateGraphCmd = &cobra.Command{
 }
 
 func init() {
-	generateTOCCmd.Flags().StringP("intro", "i", "", "Introductory text")
-	generateTOCCmd.Flags().StringP("outro", "o", "", "Closing text")
+	generateTOCCmd.Flags().StringP("intro", "i", "", "Path to introductory Markdown")
+	generateTOCCmd.Flags().StringP("outro", "o", "", "Path to closing Markdown")
 	generateTOCCmd.Flags().StringP("link-prefix", "p", "", "Prefix for links")
 
 	generateGraphCmd.Flags().StringP("link-prefix", "p", "", "Prefix for links")
@@ -88,4 +97,17 @@ func init() {
 	generateCmd.AddCommand(generateTOCCmd)
 	generateCmd.AddCommand(generateGraphCmd)
 	rootCmd.AddCommand(generateCmd)
+}
+
+func readOptionalFile(path string) (string, error) {
+	if path == "" {
+		return "", nil
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+
+	return string(data), nil
 }
