@@ -89,3 +89,32 @@ func TestInitRepositoryDiscoverable(t *testing.T) {
 		t.Errorf("discovered %q, want %q", discovered, "my-decisions")
 	}
 }
+
+func TestInitRepositoryUsesNextAvailableNumber(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("ADR_DATE", "2024-01-15")
+
+	firstPath, err := adrlog.InitRepository(dir, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	secondPath, err := adrlog.InitRepository(dir, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	wantFirst := filepath.Join("doc", "adr", "0001-record-architecture-decisions.md")
+	if firstPath != wantFirst {
+		t.Fatalf("firstPath = %q, want %q", firstPath, wantFirst)
+	}
+
+	wantSecond := filepath.Join("doc", "adr", "0002-record-architecture-decisions.md")
+	if secondPath != wantSecond {
+		t.Fatalf("secondPath = %q, want %q", secondPath, wantSecond)
+	}
+
+	if _, err := os.Stat(filepath.Join(dir, secondPath)); err != nil {
+		t.Fatalf("expected second init ADR to be created: %v", err)
+	}
+}

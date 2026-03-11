@@ -28,17 +28,29 @@ func InitRepository(cwd, dir string) (string, error) {
 		}
 	}
 
+	repo := &Repository{
+		CWD:    absBase,
+		ADRDir: dir,
+	}
+
+	number, err := repo.NextNumber()
+	if err != nil {
+		return "", err
+	}
+
 	date := os.Getenv("ADR_DATE")
 	if date == "" {
 		date = time.Now().Format("2006-01-02")
 	}
 
-	content := ApplyTemplate(InitTemplate, 1, "Record architecture decisions", date, "Accepted")
+	title := "Record architecture decisions"
+	content := ApplyTemplate(InitTemplate, number, title, date, "Accepted")
 
-	initFile := filepath.Join(adrPath, "0001-record-architecture-decisions.md")
+	filename := repo.GenerateFilename(number, title)
+	initFile := filepath.Join(adrPath, filename)
 	if err := atomicWriteFile(initFile, []byte(content)); err != nil {
 		return "", err
 	}
 
-	return filepath.Join(dir, "0001-record-architecture-decisions.md"), nil
+	return filepath.Join(dir, filename), nil
 }
