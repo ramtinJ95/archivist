@@ -22,11 +22,7 @@ func LaunchEditor(path string) error {
 		return nil
 	}
 
-	if editorCmd == "true" {
-		return nil
-	}
-
-	cmd := exec.Command(editorCmd, path)
+	cmd := exec.Command("sh", "-c", editorCmd+" \"$1\"", "sh", path)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
