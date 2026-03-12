@@ -285,3 +285,77 @@ func TestEditCommand(t *testing.T) {
 		t.Fatalf("edit failed: %v", err)
 	}
 }
+
+func TestNewCommandWithSupersede(t *testing.T) {
+	dir := t.TempDir()
+	chdir(t, dir)
+
+	_, err := adrlog.InitRepository(dir, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.Setenv("EDITOR", "true")
+
+	_, err = executeCommand("new", "First")
+	if err != nil {
+		t.Fatalf("new First failed: %v", err)
+	}
+
+	out, err := executeCommand("new", "-s", "1", "Replacement")
+	if err != nil {
+		t.Fatalf("new -s 1 Replacement failed: %v", err)
+	}
+	if !strings.Contains(out, "replacement") {
+		t.Errorf("expected new filename in output, got %q", out)
+	}
+
+	oldADR, err := os.ReadFile(filepath.Join(dir, "doc/adr/0001-record-architecture-decisions.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(oldADR), "Superceded by") {
+		t.Errorf("expected old ADR to contain 'Superceded by', got:\n%s", string(oldADR))
+	}
+}
+
+func TestNewCommandWithLink(t *testing.T) {
+	dir := t.TempDir()
+	chdir(t, dir)
+
+	_, err := adrlog.InitRepository(dir, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.Setenv("EDITOR", "true")
+
+	out, err := executeCommand("new", "-l", "1:Amends:Amended by", "Second", "ADR")
+	if err != nil {
+		t.Fatalf("new -l failed: %v", err)
+	}
+	if !strings.Contains(out, "second-adr") {
+		t.Errorf("expected new filename in output, got %q", out)
+	}
+
+	oldADR, err := os.ReadFile(filepath.Join(dir, "doc/adr/0001-record-architecture-decisions.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(oldADR), "Amended by") {
+		t.Errorf("expected old ADR to contain 'Amended by', got:\n%s", string(oldADR))
+	}
+}
+
+func TestUpgradeAlias(t *testing.T) {
+	dir := setupTestRepo(t)
+	chdir(t, dir)
+
+	out, err := executeCommand("upgrade")
+	if err != nil {
+		t.Fatalf("upgrade alias failed: %v", err)
+	}
+	if !strings.Contains(out, "Upgraded") {
+		t.Errorf("expected 'Upgraded' in output, got %q", out)
+	}
+}
