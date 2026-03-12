@@ -23,7 +23,7 @@ STATUS
 ## Consequences
 `
 
-const InitTemplate = `# 1. Record architecture decisions
+const InitTemplate = `# NUMBER. Record architecture decisions
 
 Date: DATE
 
