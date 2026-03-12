@@ -3,6 +3,7 @@ package adrlog_test
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/ramtinJ95/archivist/internal/adrlog"
@@ -92,13 +93,13 @@ func TestResolveTemplateReturnsErrorForUnreadableEnvTemplate(t *testing.T) {
 func TestApplyTemplate(t *testing.T) {
 	result := adrlog.ApplyTemplate(adrlog.DefaultTemplate, 5, "Use PostgreSQL", "2024-03-15", "Accepted")
 
-	if !containsString(result, "# 5. Use PostgreSQL") {
+	if !strings.Contains(result, "# 5. Use PostgreSQL") {
 		t.Errorf("expected title line, got:\n%s", result)
 	}
-	if !containsString(result, "Date: 2024-03-15") {
+	if !strings.Contains(result, "Date: 2024-03-15") {
 		t.Errorf("expected date line, got:\n%s", result)
 	}
-	if !containsString(result, "Accepted") {
+	if !strings.Contains(result, "Accepted") {
 		t.Errorf("expected status, got:\n%s", result)
 	}
 }
@@ -120,17 +121,4 @@ func TestPadNumber(t *testing.T) {
 			t.Errorf("PadNumber(%d) = %q, want %q", tt.n, got, tt.want)
 		}
 	}
-}
-
-func containsString(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(s) > 0 && findSubstring(s, substr))
-}
-
-func findSubstring(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
 }
