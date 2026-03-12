@@ -29,7 +29,7 @@ func TempRepoWithDotADRDir(t *testing.T, adrDir string) string {
 	dir := TempRepoWithADRDir(t, adrDir)
 
 	dotFile := filepath.Join(dir, ".adr-dir")
-	if err := os.WriteFile(dotFile, []byte(adrDir), 0o644); err != nil {
+	if err := os.WriteFile(dotFile, []byte(adrDir+"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 

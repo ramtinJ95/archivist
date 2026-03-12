@@ -62,8 +62,8 @@ func TestInitRepositoryCustomDir(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(data) != "architecture-log" {
-		t.Errorf(".adr-dir = %q, want %q", string(data), "architecture-log")
+	if string(data) != "architecture-log\n" {
+		t.Errorf(".adr-dir = %q, want %q", string(data), "architecture-log\n")
 	}
 
 	adrPath := filepath.Join(dir, relPath)

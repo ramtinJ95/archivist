@@ -23,7 +23,7 @@ func InitRepository(cwd, dir string) (string, error) {
 
 	if dir != defaultADRDir {
 		dotFile := filepath.Join(absBase, dotADRDirFile)
-		if err := os.WriteFile(dotFile, []byte(dir), 0o644); err != nil {
+		if err := os.WriteFile(dotFile, []byte(dir+"\n"), 0o644); err != nil {
 			return "", err
 		}
 	}
