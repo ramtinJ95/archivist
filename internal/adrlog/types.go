@@ -1,9 +1,8 @@
 package adrlog
 
 type Repository struct {
-	CWD      string
-	ADRDir   string
-	RootHint string
+	CWD    string
+	ADRDir string
 }
 
 type Record struct {
@@ -14,13 +13,6 @@ type Record struct {
 	Date     string
 	Status   []string
 	Content  string
-}
-
-type Relation struct {
-	SourceRef    string
-	TargetRef    string
-	ForwardLabel string
-	ReverseLabel string
 }
 
 type ValidationIssue struct {
