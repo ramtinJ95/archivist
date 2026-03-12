@@ -38,7 +38,7 @@ archivist show postgresql
 archivist new -s 2 Use SQLite instead
 
 # Link two ADRs with custom labels
-archivist link 3 1 "Amends" "Amended by"
+archivist link 3 "Amends" 1 "Amended by"
 
 # Search across all ADRs
 archivist search "database"
@@ -54,6 +54,9 @@ archivist generate graph | dot -Tpng -o graph.png
 
 # Upgrade date format from DD/MM/YYYY to ISO 8601
 archivist upgrade-repository
+
+# Or use the shorter alias
+archivist upgrade
 ```
 
 ## Interactive TUI
@@ -73,6 +76,7 @@ Split-pane interface with ADR list and content preview:
 | e         | Edit selected in $EDITOR  |
 | s         | Supersede selected ADR    |
 | l         | Link selected ADR         |
+| g         | Generate TOC or graph     |
 | ?         | Help                      |
 | q         | Quit                      |
 
