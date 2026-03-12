@@ -37,15 +37,10 @@ func newCreateWizard() wizardModel {
 	titleInput.Width = 50
 	titleInput.Focus()
 
-	statusInput := textinput.New()
-	statusInput.Placeholder = "Accepted"
-	statusInput.CharLimit = 50
-	statusInput.Width = 50
-
 	return wizardModel{
 		kind:   wizardCreate,
-		inputs: []textinput.Model{titleInput, statusInput},
-		labels: []string{"Title", "Status (default: Accepted)"},
+		inputs: []textinput.Model{titleInput},
+		labels: []string{"Title"},
 	}
 }
 
@@ -72,12 +67,12 @@ func newLinkWizard(source *adrlog.Record) wizardModel {
 	targetInput.Focus()
 
 	fwdInput := textinput.New()
-	fwdInput.Placeholder = "e.g. Amended by"
+	fwdInput.Placeholder = "e.g. Amends"
 	fwdInput.CharLimit = 60
 	fwdInput.Width = 50
 
 	revInput := textinput.New()
-	revInput.Placeholder = "e.g. Amends"
+	revInput.Placeholder = "e.g. Amended by"
 	revInput.CharLimit = 60
 	revInput.Width = 50
 
