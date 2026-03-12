@@ -136,6 +136,25 @@ func TestLinkViaCreateADR(t *testing.T) {
 	}
 }
 
+func TestAddLinkFailsWithoutStatusHeading(t *testing.T) {
+	dir := testutil.TempRepoWithADRDir(t, "doc/adr")
+	adrDir := filepath.Join(dir, "doc", "adr")
+
+	noStatusContent := "# 1. Test ADR\n\nDate: 2024-01-15\n\n## Context\n\nSome context.\n"
+	source := testutil.SeedADR(t, adrDir, "0001-test.md", noStatusContent)
+
+	targetContent := "# 2. Target ADR\n\nDate: 2024-01-16\n\n## Status\n\nAccepted\n\n## Context\n\nSome context.\n"
+	target := testutil.SeedADR(t, adrDir, "0002-target.md", targetContent)
+
+	err := adrlog.AddLink(source, target, "Amends", "Amended by")
+	if err == nil {
+		t.Fatal("expected error when source has no ## Status heading")
+	}
+	if !strings.Contains(err.Error(), "no ## Status heading") {
+		t.Errorf("expected error about missing Status heading, got: %v", err)
+	}
+}
+
 func TestAddLinkPreservesExistingContent(t *testing.T) {
 	dir := testutil.TempRepoWithADRDir(t, "doc/adr")
 	adrDir := filepath.Join(dir, "doc", "adr")
