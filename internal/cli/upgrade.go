@@ -9,8 +9,9 @@ import (
 )
 
 var upgradeCmd = &cobra.Command{
-	Use:   "upgrade-repository",
-	Short: "Upgrade ADR repository to latest format",
+	Use:     "upgrade-repository",
+	Aliases: []string{"upgrade"},
+	Short:   "Upgrade ADR repository to latest format",
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cwd, err := os.Getwd()
