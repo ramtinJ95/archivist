@@ -1,11 +1,11 @@
 package cli
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 
 	"github.com/ramtinJ95/archivist/internal/adrlog"
+	"github.com/ramtinJ95/archivist/internal/editor"
 	"github.com/spf13/cobra"
 )
 
@@ -38,8 +38,7 @@ var showCmd = &cobra.Command{
 			return err
 		}
 
-		fmt.Fprint(cmd.OutOrStdout(), string(data))
-		return nil
+		return editor.LaunchPager(cmd.OutOrStdout(), string(data))
 	},
 }
 
