@@ -2,6 +2,7 @@ package adrlog
 
 import (
 	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -74,8 +75,7 @@ func extractStatusLines(content string) []string {
 }
 
 func extractFilename(path string) string {
-	parts := strings.Split(path, "/")
-	return parts[len(parts)-1]
+	return filepath.Base(path)
 }
 
 func ExtractLeadingNumber(filename string) int {
