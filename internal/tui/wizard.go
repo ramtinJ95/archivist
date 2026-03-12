@@ -26,6 +26,7 @@ type wizardModel struct {
 	focusIndex   int
 	done         bool
 	cancelled    bool
+	confirming   bool
 	resultMsg    string
 	targetRecord *adrlog.Record
 }
@@ -91,6 +92,10 @@ func (w *wizardModel) update(msg tea.KeyMsg) tea.Cmd {
 		w.done = true
 		return nil
 	case "esc":
+		if w.confirming {
+			w.confirming = false
+			return nil
+		}
 		w.cancelled = true
 		w.done = true
 		return nil
@@ -101,8 +106,12 @@ func (w *wizardModel) update(msg tea.KeyMsg) tea.Cmd {
 		w.focusIndex = (w.focusIndex - 1 + len(w.inputs)) % len(w.inputs)
 		return w.updateFocus()
 	case "enter":
-		if w.focusIndex == len(w.inputs)-1 {
+		if w.confirming {
 			w.done = true
+			return nil
+		}
+		if w.focusIndex == len(w.inputs)-1 {
+			w.confirming = true
 			return nil
 		}
 		w.focusIndex++
@@ -126,7 +135,36 @@ func (w *wizardModel) updateFocus() tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
+func (w *wizardModel) confirmationSummary() string {
+	switch w.kind {
+	case wizardCreate:
+		title := strings.TrimSpace(w.inputs[0].Value())
+		return fmt.Sprintf("Create new ADR: %q", title)
+	case wizardSupersede:
+		title := strings.TrimSpace(w.inputs[0].Value())
+		return fmt.Sprintf("Create %q superseding ADR %d: %s",
+			title, w.targetRecord.Number, w.targetRecord.Title)
+	case wizardLink:
+		target := strings.TrimSpace(w.inputs[0].Value())
+		fwd := strings.TrimSpace(w.inputs[1].Value())
+		rev := strings.TrimSpace(w.inputs[2].Value())
+		return fmt.Sprintf("Link ADR %d -%s-> %s (reverse: %s)",
+			w.targetRecord.Number, fwd, target, rev)
+	}
+	return ""
+}
+
 func (w *wizardModel) view(width, height int) string {
+	if w.confirming {
+		var sb strings.Builder
+		sb.WriteString(titleStyle.Render("Confirm"))
+		sb.WriteString("\n\n")
+		sb.WriteString(w.confirmationSummary())
+		sb.WriteString("\n\n")
+		sb.WriteString(helpDescStyle.Render("enter: confirm  esc: back to editing"))
+		return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, sb.String())
+	}
+
 	var sb strings.Builder
 
 	switch w.kind {
