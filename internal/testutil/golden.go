@@ -1,10 +1,13 @@
 package testutil
 
 import (
+	"flag"
 	"os"
 	"path/filepath"
 	"testing"
 )
+
+var updateGolden = flag.Bool("update-golden", false, "update golden files")
 
 func GoldenPath(t *testing.T, name string) string {
 	t.Helper()
@@ -29,4 +32,19 @@ func ReadGolden(t *testing.T, path string) []byte {
 		t.Fatal(err)
 	}
 	return data
+}
+
+func AssertGolden(t *testing.T, name string, actual []byte) {
+	t.Helper()
+	path := GoldenPath(t, name)
+
+	if *updateGolden {
+		UpdateGolden(t, path, actual)
+		return
+	}
+
+	expected := ReadGolden(t, path)
+	if string(actual) != string(expected) {
+		t.Errorf("golden mismatch for %s:\n--- expected ---\n%s\n--- actual ---\n%s", name, string(expected), string(actual))
+	}
 }
