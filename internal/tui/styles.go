@@ -27,7 +27,4 @@ var (
 	titleStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("205")).
 			Bold(true)
-
-	selectedItemStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("170"))
 )
