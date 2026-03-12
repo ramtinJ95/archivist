@@ -9,26 +9,6 @@ import (
 	"github.com/ramtinJ95/archivist/internal/testutil"
 )
 
-func loadRecordsForTest(repo *adrlog.Repository) ([]*adrlog.Record, error) {
-	files, err := repo.ListFiles()
-	if err != nil {
-		return nil, err
-	}
-	var records []*adrlog.Record
-	for _, f := range files {
-		absPath := f
-		if !filepath.IsAbs(f) {
-			absPath = filepath.Join(repo.CWD, f)
-		}
-		rec, err := adrlog.ParseRecord(absPath)
-		if err != nil {
-			continue
-		}
-		records = append(records, rec)
-	}
-	return records, nil
-}
-
 func testModel(t *testing.T) Model {
 	t.Helper()
 	dir := testutil.TempRepoWithADRDir(t, "doc/adr")
@@ -37,7 +17,7 @@ func testModel(t *testing.T) Model {
 	testutil.SeedADR(t, adrDir, "0002-use-go-for-implementation.md", testutil.SampleADR2)
 
 	repo := &adrlog.Repository{CWD: dir, ADRDir: "doc/adr"}
-	records, err := loadRecordsForTest(repo)
+	records, err := loadRecords(repo)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -61,6 +61,10 @@ func ResolveTemplate(adrAbsDir string) (string, error) {
 	return DefaultTemplate, nil
 }
 
+// ApplyTemplate performs global replacement of NUMBER, TITLE, DATE, and STATUS
+// placeholders. This matches upstream adr-tools behavior (sed s/TOKEN/value/g),
+// which means occurrences of these words anywhere in the template body will also
+// be replaced. This is intentional for adr-tools parity.
 func ApplyTemplate(template string, number int, title, date, status string) string {
 	numStr := strconv.Itoa(number)
 

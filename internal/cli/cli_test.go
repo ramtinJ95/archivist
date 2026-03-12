@@ -1,3 +1,6 @@
+// These tests mutate global state (rootCmd and os.Chdir) and must NOT use
+// t.Parallel(). The shared Cobra rootCmd is reused across calls, and chdir
+// affects the entire process. Running them concurrently would cause races.
 package cli
 
 import (

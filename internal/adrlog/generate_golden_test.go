@@ -25,7 +25,7 @@ func TestGenerateTOCGolden(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	testutil.AssertGolden(t, "toc-basic", []byte(toc))
+	testutil.AssertGolden(t, "generate/toc-basic", []byte(toc))
 }
 
 func TestGenerateGraphGolden(t *testing.T) {
@@ -45,5 +45,5 @@ func TestGenerateGraphGolden(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	testutil.AssertGolden(t, "graph-basic", []byte(graph))
+	testutil.AssertGolden(t, "generate/graph-basic", []byte(graph))
 }

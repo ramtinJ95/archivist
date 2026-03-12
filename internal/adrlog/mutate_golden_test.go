@@ -24,13 +24,13 @@ func TestAddLinkGolden(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	testutil.AssertGolden(t, "link-source", sourceData)
+	testutil.AssertGolden(t, "link/link-source", sourceData)
 
 	targetData, err := os.ReadFile(targetPath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	testutil.AssertGolden(t, "link-target", targetData)
+	testutil.AssertGolden(t, "link/link-target", targetData)
 }
 
 func TestSupersedeGolden(t *testing.T) {
@@ -58,11 +58,11 @@ func TestSupersedeGolden(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	testutil.AssertGolden(t, "supersede-new", newData)
+	testutil.AssertGolden(t, "supersede/supersede-new", newData)
 
 	oldData, err := os.ReadFile(filepath.Join(adrDir, "0002-use-go-for-implementation.md"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	testutil.AssertGolden(t, "supersede-old", oldData)
+	testutil.AssertGolden(t, "supersede/supersede-old", oldData)
 }
