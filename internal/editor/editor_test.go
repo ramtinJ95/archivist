@@ -91,3 +91,33 @@ func TestLaunchEditorSupportsCommandWithFlags(t *testing.T) {
 		}
 	}
 }
+
+func TestResolvePagerADRPagerPrecedence(t *testing.T) {
+	t.Setenv("ADR_PAGER", "less -R")
+	t.Setenv("PAGER", "more")
+
+	got := editor.ResolvePager()
+	if got != "less -R" {
+		t.Errorf("got %q, want %q", got, "less -R")
+	}
+}
+
+func TestResolvePagerFallsToPager(t *testing.T) {
+	t.Setenv("ADR_PAGER", "")
+	t.Setenv("PAGER", "more")
+
+	got := editor.ResolvePager()
+	if got != "more" {
+		t.Errorf("got %q, want %q", got, "more")
+	}
+}
+
+func TestResolvePagerEmptyWhenUnset(t *testing.T) {
+	t.Setenv("ADR_PAGER", "")
+	t.Setenv("PAGER", "")
+
+	got := editor.ResolvePager()
+	if got != "" {
+		t.Errorf("got %q, want empty string", got)
+	}
+}
