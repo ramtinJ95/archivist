@@ -18,18 +18,21 @@ func ResolveEditor() string {
 	return ""
 }
 
+func EditorCommand(editorCmd, path string) *exec.Cmd {
+	cmd := exec.Command("sh", "-c", editorCmd+" \"$1\"", "sh", path)
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd
+}
+
 func LaunchEditor(path string) error {
 	editorCmd := ResolveEditor()
 	if editorCmd == "" {
 		return nil
 	}
 
-	cmd := exec.Command("sh", "-c", editorCmd+" \"$1\"", "sh", path)
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	if err := cmd.Run(); err != nil {
+	if err := EditorCommand(editorCmd, path).Run(); err != nil {
 		return fmt.Errorf("editor %q: %w", editorCmd, err)
 	}
 	return nil

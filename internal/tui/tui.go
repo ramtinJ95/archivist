@@ -2,8 +2,6 @@ package tui
 
 import (
 	"fmt"
-	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -271,10 +269,7 @@ func (m *Model) openEditorForSelected() (tea.Model, tea.Cmd) {
 		absPath = filepath.Join(m.repo.CWD, absPath)
 	}
 
-	c := exec.Command("sh", "-c", editorCmd+" \"$1\"", "sh", absPath)
-	c.Stdin = os.Stdin
-	c.Stdout = os.Stdout
-	c.Stderr = os.Stderr
+	c := editor.EditorCommand(editorCmd, absPath)
 
 	return m, tea.ExecProcess(c, func(err error) tea.Msg {
 		return editorFinishedMsg{err: err}
