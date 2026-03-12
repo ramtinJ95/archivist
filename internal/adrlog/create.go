@@ -21,10 +21,10 @@ func Slugify(title string) string {
 func (r *Repository) NextNumber() (int, error) {
 	files, err := r.ListFiles()
 	if err != nil {
-		if len(files) == 0 {
-			return 1, nil
-		}
 		return 0, err
+	}
+	if len(files) == 0 {
+		return 1, nil
 	}
 
 	maxNum := 0
