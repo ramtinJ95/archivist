@@ -262,7 +262,7 @@ func (m *Model) openEditorForSelected() (tea.Model, tea.Cmd) {
 		absPath = filepath.Join(m.repo.CWD, absPath)
 	}
 
-	c := exec.Command(editorCmd, absPath)
+	c := exec.Command("sh", "-c", editorCmd+" \"$1\"", "sh", absPath)
 	c.Stdin = os.Stdin
 	c.Stdout = os.Stdout
 	c.Stderr = os.Stderr
