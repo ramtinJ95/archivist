@@ -91,7 +91,7 @@ func (r *Repository) GenerateGraph(opts GraphOptions) (string, error) {
 	sb.WriteString("  node [shape=plaintext]\n")
 
 	for _, rec := range records {
-		nodeID := fmt.Sprintf("_%.d", rec.Number)
+		nodeID := fmt.Sprintf("_%d", rec.Number)
 		base := filepath.Base(rec.Path)
 		linkTarget := replaceExtension(base, ext)
 		url := opts.LinkPrefix + linkTarget
@@ -101,8 +101,8 @@ func (r *Repository) GenerateGraph(opts GraphOptions) (string, error) {
 	}
 
 	for i := 0; i < len(records)-1; i++ {
-		cur := fmt.Sprintf("_%.d", records[i].Number)
-		next := fmt.Sprintf("_%.d", records[i+1].Number)
+		cur := fmt.Sprintf("_%d", records[i].Number)
+		next := fmt.Sprintf("_%d", records[i+1].Number)
 		sb.WriteString(fmt.Sprintf("  %s -> %s [style=\"dotted\", weight=1]\n", cur, next))
 	}
 
@@ -124,8 +124,8 @@ func (r *Repository) GenerateGraph(opts GraphOptions) (string, error) {
 				continue
 			}
 
-			srcNode := fmt.Sprintf("_%.d", rec.Number)
-			tgtNode := fmt.Sprintf("_%.d", targetNum)
+			srcNode := fmt.Sprintf("_%d", rec.Number)
+			tgtNode := fmt.Sprintf("_%d", targetNum)
 			sb.WriteString(fmt.Sprintf("  %s -> %s [label=\"%s\", weight=0]\n", srcNode, tgtNode, label))
 		}
 	}
