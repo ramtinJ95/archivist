@@ -102,3 +102,38 @@ func TestListFilesEmptyDir(t *testing.T) {
 		t.Errorf("got %d files, want 0", len(files))
 	}
 }
+
+func TestListFilesMatchesFiveDigitADRPattern(t *testing.T) {
+	dir := testutil.TempRepoWithADRDir(t, "doc/adr")
+	adrDir := filepath.Join(dir, "doc", "adr")
+
+	testutil.SeedADR(t, adrDir, "9999-last-four-digit.md", testutil.SampleADR1)
+	testutil.SeedADR(t, adrDir, "10000-five-digits.md", testutil.SampleADR2)
+
+	repo, err := adrlog.OpenRepository(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	files, err := repo.ListFiles()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(files) != 2 {
+		t.Fatalf("got %d files, want 2: %v", len(files), files)
+	}
+
+	wantFiveDigit := filepath.Join("doc", "adr", "10000-five-digits.md")
+	if files[0] != wantFiveDigit && files[1] != wantFiveDigit {
+		t.Fatalf("expected %q in files, got %v", wantFiveDigit, files)
+	}
+
+	next, err := repo.NextNumber()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if next != 10001 {
+		t.Fatalf("NextNumber() = %d, want 10001", next)
+	}
+}

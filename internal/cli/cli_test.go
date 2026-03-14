@@ -98,6 +98,7 @@ func TestListCommand(t *testing.T) {
 func TestShowCommand(t *testing.T) {
 	dir := setupTestRepo(t)
 	chdir(t, dir)
+	t.Setenv("PAGER", "cat")
 
 	out, err := executeCommand("show", "1")
 	if err != nil {
@@ -235,6 +236,26 @@ func TestNewCommand(t *testing.T) {
 	}
 	if !strings.Contains(out, "use-postgresql") {
 		t.Errorf("expected slugified filename in output, got %q", out)
+	}
+}
+
+func TestNewCommandDoesNotPrintPathWhenEditorFails(t *testing.T) {
+	dir := t.TempDir()
+	chdir(t, dir)
+
+	_, err := adrlog.InitRepository(dir, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.Setenv("EDITOR", "false")
+
+	out, err := executeCommand("new", "Use", "PostgreSQL")
+	if err == nil {
+		t.Fatal("expected new to fail when editor exits non-zero")
+	}
+	if out != "" {
+		t.Fatalf("expected no output on editor failure, got %q", out)
 	}
 }
 

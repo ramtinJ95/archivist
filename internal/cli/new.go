@@ -49,10 +49,13 @@ var newCmd = &cobra.Command{
 			return err
 		}
 
-		fmt.Fprintln(cmd.OutOrStdout(), relPath)
-
 		absPath := filepath.Join(cwd, relPath)
-		return editor.LaunchEditor(absPath)
+		if err := editor.LaunchEditor(absPath); err != nil {
+			return err
+		}
+
+		fmt.Fprintln(cmd.OutOrStdout(), relPath)
+		return nil
 	},
 }
 

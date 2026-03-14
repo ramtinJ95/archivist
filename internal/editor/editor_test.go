@@ -1,6 +1,7 @@
 package editor_test
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"strings"
@@ -119,5 +120,33 @@ func TestResolvePagerEmptyWhenUnset(t *testing.T) {
 	got := editor.ResolvePager()
 	if got != "" {
 		t.Errorf("got %q, want empty string", got)
+	}
+}
+
+func TestLaunchPagerWritesToProvidedWriterWithoutPager(t *testing.T) {
+	t.Setenv("ADR_PAGER", "")
+	t.Setenv("PAGER", "")
+
+	var buf bytes.Buffer
+	if err := editor.LaunchPager(&buf, "hello"); err != nil {
+		t.Fatalf("LaunchPager returned error: %v", err)
+	}
+
+	if got := buf.String(); got != "hello" {
+		t.Fatalf("got %q, want %q", got, "hello")
+	}
+}
+
+func TestLaunchPagerWritesToProvidedWriterWithPager(t *testing.T) {
+	t.Setenv("ADR_PAGER", "")
+	t.Setenv("PAGER", "cat")
+
+	var buf bytes.Buffer
+	if err := editor.LaunchPager(&buf, "hello"); err != nil {
+		t.Fatalf("LaunchPager returned error: %v", err)
+	}
+
+	if got := buf.String(); got != "hello" {
+		t.Fatalf("got %q, want %q", got, "hello")
 	}
 }

@@ -8,7 +8,7 @@ import (
 	"sort"
 )
 
-var adrFilenamePattern = regexp.MustCompile(`^\d{4}-.*\.md$`)
+var adrFilenamePattern = regexp.MustCompile(`^\d+-.*\.md$`)
 
 func (r *Repository) ListFiles() ([]string, error) {
 	absDir := r.AbsADRDir()

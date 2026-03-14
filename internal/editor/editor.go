@@ -57,7 +57,7 @@ func LaunchPager(w io.Writer, content string) error {
 
 	cmd := exec.Command("sh", "-c", pagerCmd)
 	cmd.Stdin = strings.NewReader(content)
-	cmd.Stdout = os.Stdout
+	cmd.Stdout = w
 	cmd.Stderr = os.Stderr
 
 	if err := cmd.Run(); err != nil {
