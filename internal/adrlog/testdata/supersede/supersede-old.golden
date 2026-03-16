@@ -1,0 +1,20 @@
+# 2. Use Go for implementation
+
+Date: 2024-01-16
+
+## Status
+
+
+Superceded by [3. Use Rust instead](0003-use-rust-instead.md)
+
+## Context
+
+We need a compiled language with good CLI support.
+
+## Decision
+
+We will use Go.
+
+## Consequences
+
+The team needs Go experience.

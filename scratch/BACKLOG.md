@@ -1,0 +1,2 @@
+- README follow-up: consider adding implementation-status section or feature matrix once compatibility milestones are formally verified.
+- Platform follow-up: editor/pager launching currently depends on `sh -c`, so Windows is not a supported release target until command execution is abstracted or platform-specific launch paths are added.

@@ -27,6 +27,11 @@ go.work.sum
 # env file
 .env
 
+# Release/build artifacts
+dist/
+/archivist
+.claude/worktrees/
+
 # Editor/IDE
 # .idea/
 # .vscode/

@@ -1,0 +1,21 @@
+# 2. Use Go for implementation
+
+Date: 2024-01-16
+
+## Status
+
+Accepted
+
+Clarified by [1. Record architecture decisions](0001-record-architecture-decisions.md)
+
+## Context
+
+We need a compiled language with good CLI support.
+
+## Decision
+
+We will use Go.
+
+## Consequences
+
+The team needs Go experience.
