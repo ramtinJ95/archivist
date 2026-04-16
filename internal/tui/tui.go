@@ -21,6 +21,7 @@ const (
 	helpView
 	wizardView
 	generateView
+	validationView
 )
 
 type editorFinishedMsg struct{ err error }
@@ -28,11 +29,13 @@ type editorFinishedMsg struct{ err error }
 type Model struct {
 	repo             *adrlog.Repository
 	list             list.Model
-	viewport         viewport.Model
+	previewViewport  viewport.Model
+	detailViewport   viewport.Model
 	wizard           wizardModel
+	validationIssues []adrlog.ValidationIssue
 	state            viewState
 	statusMsg        string
-	generatedContent string
+	detailTitle      string
 	width            int
 	height           int
 	ready            bool
@@ -58,14 +61,16 @@ func NewModel(repo *adrlog.Repository, records []*adrlog.Record) Model {
 	l.SetFilteringEnabled(true)
 	l.DisableQuitKeybindings()
 
-	vp := viewport.New(0, 0)
-
-	return Model{
-		repo:     repo,
-		list:     l,
-		viewport: vp,
-		state:    listView,
+	m := Model{
+		repo:            repo,
+		list:            l,
+		previewViewport: viewport.New(0, 0),
+		detailViewport:  viewport.New(0, 0),
+		state:           listView,
 	}
+	m.refreshValidationIssues()
+	m.updatePreview()
+	return m
 }
 
 func (m Model) Init() tea.Cmd {
@@ -88,7 +93,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.statusMsg = "Editor closed"
 		}
 		m.reloadRecords()
-		m.updatePreview()
 		return m, nil
 
 	case tea.KeyMsg:
@@ -96,7 +100,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateWizardView(msg)
 		}
 
-		if m.list.FilterState() == list.Filtering {
+		if m.state == listView && m.list.FilterState() == list.Filtering {
 			var cmd tea.Cmd
 			m.list, cmd = m.list.Update(msg)
 			m.updatePreview()
@@ -112,6 +116,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateHelpView(msg)
 		case generateView:
 			return m.updateGenerateView(msg)
+		case validationView:
+			return m.updateValidationView(msg)
 		}
 	}
 
@@ -131,7 +137,7 @@ func (m Model) View() string {
 	}
 
 	switch m.state {
-	case detailView:
+	case detailView, validationView:
 		return m.renderDetailView()
 	case helpView:
 		return m.renderHelpView()
@@ -148,32 +154,51 @@ func (m *Model) updateLayout() {
 	statusBarHeight := 1
 	availableHeight := m.height - statusBarHeight
 
-	switch m.state {
-	case listView:
-		listWidth := m.width * 2 / 5
-		previewWidth := m.width - listWidth
+	listWidth := m.width * 2 / 5
+	previewWidth := m.width - listWidth
 
-		borderH, borderV := listPanelBorder.GetFrameSize()
-		m.list.SetSize(listWidth-borderH, availableHeight-borderV)
+	borderH, borderV := listPanelBorder.GetFrameSize()
+	m.list.SetSize(listWidth-borderH, availableHeight-borderV)
 
-		borderH, borderV = detailPanelBorder.GetFrameSize()
-		m.viewport.Width = previewWidth - borderH
-		m.viewport.Height = availableHeight - borderV
-
-	case detailView:
-		borderH, borderV := detailPanelBorder.GetFrameSize()
-		m.viewport.Width = m.width - borderH
-		m.viewport.Height = availableHeight - borderV
-	}
+	borderH, borderV = detailPanelBorder.GetFrameSize()
+	m.previewViewport.Width = previewWidth - borderH
+	m.previewViewport.Height = availableHeight - borderV
+	m.detailViewport.Width = m.width - borderH
+	m.detailViewport.Height = availableHeight - borderV
 
 	m.updatePreview()
 }
 
 func (m *Model) updatePreview() {
 	if item, ok := m.list.SelectedItem().(ADRItem); ok {
-		m.viewport.SetContent(item.record.Content)
-		m.viewport.GotoTop()
+		m.previewViewport.SetContent(item.record.Content)
+		m.previewViewport.GotoTop()
+		return
 	}
+	m.previewViewport.SetContent("No ADRs found.")
+	m.previewViewport.GotoTop()
+}
+
+func (m *Model) setDetailContent(title, content string) {
+	m.detailTitle = title
+	m.detailViewport.SetContent(content)
+	m.detailViewport.GotoTop()
+}
+
+func (m *Model) openSelectedDetail() {
+	item, ok := m.list.SelectedItem().(ADRItem)
+	if !ok {
+		return
+	}
+	m.setDetailContent(fmt.Sprintf("%d. %s", item.record.Number, item.record.Title), item.record.Content)
+	m.state = detailView
+	m.updateLayout()
+}
+
+func (m *Model) openValidationView() {
+	m.setDetailContent("Validation report", formatValidationIssues(m.validationIssues))
+	m.state = validationView
+	m.updateLayout()
 }
 
 func (m Model) updateListView(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -181,8 +206,8 @@ func (m Model) updateListView(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "q", "ctrl+c":
 		return m, tea.Quit
 	case "enter":
-		m.state = detailView
-		m.updateLayout()
+		m.statusMsg = ""
+		m.openSelectedDetail()
 		return m, nil
 	case "/":
 		m.list.ResetFilter()
@@ -193,7 +218,7 @@ func (m Model) updateListView(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.state = helpView
 		return m, nil
 	case "n":
-		m.wizard = newCreateWizard()
+		m.wizard = newCreateWizard(m.repo)
 		m.state = wizardView
 		m.statusMsg = ""
 		return m, nil
@@ -201,14 +226,14 @@ func (m Model) updateListView(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.openEditorForSelected()
 	case "s":
 		if item, ok := m.list.SelectedItem().(ADRItem); ok {
-			m.wizard = newSupersedeWizard(item.record)
+			m.wizard = newSupersedeWizard(m.repo, item.record)
 			m.state = wizardView
 			m.statusMsg = ""
 		}
 		return m, nil
 	case "l":
 		if item, ok := m.list.SelectedItem().(ADRItem); ok {
-			m.wizard = newLinkWizard(item.record)
+			m.wizard = newLinkWizard(m.repo, item.record, m.currentRecords())
 			m.state = wizardView
 			m.statusMsg = ""
 		}
@@ -216,6 +241,10 @@ func (m Model) updateListView(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "g":
 		m.state = generateView
 		m.statusMsg = ""
+		return m, nil
+	case "v":
+		m.statusMsg = ""
+		m.openValidationView()
 		return m, nil
 	}
 
@@ -277,8 +306,15 @@ func (m *Model) openEditorForSelected() (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) reloadRecords() {
+	selectedBase := m.selectedBasename()
+
 	records, err := loadRecords(m.repo)
 	if err != nil {
+		m.validationIssues = []adrlog.ValidationIssue{{
+			Path:     m.repo.ADRDir,
+			Severity: "error",
+			Message:  err.Error(),
+		}}
 		return
 	}
 
@@ -288,6 +324,58 @@ func (m *Model) reloadRecords() {
 	}
 
 	m.list.SetItems(items)
+	m.selectByBasename(selectedBase)
+	m.refreshValidationIssues()
+	m.updatePreview()
+}
+
+func (m *Model) refreshValidationIssues() {
+	issues, err := m.repo.Validate()
+	if err != nil {
+		m.validationIssues = []adrlog.ValidationIssue{{
+			Path:     m.repo.ADRDir,
+			Severity: "error",
+			Message:  err.Error(),
+		}}
+		return
+	}
+	m.validationIssues = issues
+}
+
+func (m Model) selectedBasename() string {
+	item, ok := m.list.SelectedItem().(ADRItem)
+	if !ok {
+		return ""
+	}
+	return filepath.Base(item.record.Path)
+}
+
+func (m *Model) selectByBasename(base string) {
+	if base == "" {
+		return
+	}
+	for i, item := range m.list.Items() {
+		adrItem, ok := item.(ADRItem)
+		if !ok {
+			continue
+		}
+		if filepath.Base(adrItem.record.Path) == base {
+			m.list.Select(i)
+			return
+		}
+	}
+}
+
+func (m Model) currentRecords() []*adrlog.Record {
+	items := m.list.Items()
+	records := make([]*adrlog.Record, 0, len(items))
+	for _, item := range items {
+		adrItem, ok := item.(ADRItem)
+		if ok {
+			records = append(records, adrItem.record)
+		}
+	}
+	return records
 }
 
 func (m Model) updateDetailView(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -301,8 +389,12 @@ func (m Model) updateDetailView(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 
 	var cmd tea.Cmd
-	m.viewport, cmd = m.viewport.Update(msg)
+	m.detailViewport, cmd = m.detailViewport.Update(msg)
 	return m, cmd
+}
+
+func (m Model) updateValidationView(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	return m.updateDetailView(msg)
 }
 
 func (m Model) updateHelpView(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -320,8 +412,7 @@ func (m Model) updateGenerateView(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.updateLayout()
 			return m, nil
 		}
-		m.generatedContent = toc
-		m.viewport.SetContent(toc)
+		m.setDetailContent("Generated TOC", toc)
 		m.state = detailView
 		m.updateLayout()
 		m.statusMsg = "Generated TOC"
@@ -334,8 +425,7 @@ func (m Model) updateGenerateView(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.updateLayout()
 			return m, nil
 		}
-		m.generatedContent = graph
-		m.viewport.SetContent(graph)
+		m.setDetailContent("Generated DOT graph", graph)
 		m.state = detailView
 		m.updateLayout()
 		m.statusMsg = "Generated DOT graph"
@@ -363,7 +453,7 @@ func (m Model) renderListView() string {
 	previewPanel := detailPanelBorder.
 		Width(previewWidth - detailPanelBorder.GetHorizontalFrameSize()).
 		Height(availableHeight - detailPanelBorder.GetVerticalFrameSize()).
-		Render(m.viewport.View())
+		Render(m.previewViewport.View())
 
 	panels := lipgloss.JoinHorizontal(lipgloss.Top, listPanel, previewPanel)
 
@@ -379,7 +469,7 @@ func (m Model) renderDetailView() string {
 	content := detailPanelBorder.
 		Width(m.width - detailPanelBorder.GetHorizontalFrameSize()).
 		Height(availableHeight - detailPanelBorder.GetVerticalFrameSize()).
-		Render(m.viewport.View())
+		Render(m.detailViewport.View())
 
 	statusBar := m.renderStatusBar()
 
@@ -390,17 +480,18 @@ func (m Model) renderHelpView() string {
 	bindings := []struct{ key, desc string }{
 		{"j/k, up/down", "Navigate list"},
 		{"enter", "Open detail view"},
-		{"/", "Filter ADRs by title"},
-		{"n", "Create new ADR"},
+		{"/", "Filter ADRs by title, path, or content"},
+		{"n", "Create new ADR with preview"},
 		{"e", "Edit selected ADR in $EDITOR"},
-		{"s", "Supersede selected ADR"},
-		{"l", "Link selected ADR"},
+		{"s", "Supersede selected ADR with preview"},
+		{"l", "Link selected ADR with repo-aware target picker"},
+		{"v", "Open validation report"},
 		{"g", "Generate TOC or graph"},
 		{"?", "Show this help"},
 		{"esc", "Back / Cancel filter"},
 		{"q, ctrl+c", "Quit"},
 		{"", ""},
-		{"Detail view:", ""},
+		{"Detail / validation view:", ""},
 		{"j/k, up/down", "Scroll content"},
 		{"esc, backspace", "Back to list"},
 		{"q", "Quit"},
@@ -443,11 +534,11 @@ func (m Model) renderGenerateView() string {
 	sb.WriteString("\n\n")
 	sb.WriteString(fmt.Sprintf("  %s  %s\n",
 		helpKeyStyle.Render("t"),
-		helpDescStyle.Render("Generate Table of Contents"),
+		helpDescStyle.Render("Generate Table of Contents preview"),
 	))
 	sb.WriteString(fmt.Sprintf("  %s  %s\n",
 		helpKeyStyle.Render("d"),
-		helpDescStyle.Render("Generate DOT dependency graph"),
+		helpDescStyle.Render("Generate DOT dependency graph preview"),
 	))
 	sb.WriteString("\n")
 	sb.WriteString(helpDescStyle.Render("esc: back"))
@@ -460,24 +551,10 @@ func (m Model) renderGenerateView() string {
 }
 
 func (m Model) renderStatusBar() string {
-	var leftText string
-	if m.statusMsg != "" {
-		leftText = m.statusMsg
-	} else if item, ok := m.list.SelectedItem().(ADRItem); ok {
-		leftText = filepath.Base(item.record.Path)
-	}
-
+	leftText := m.statusBarLeftText()
 	left := statusBarStyle.Render(leftText)
 
-	var hints string
-	switch m.state {
-	case listView:
-		hints = "↑/↓:nav  enter:detail  /:filter  n:new  e:edit  s:supersede  l:link  g:generate  ?:help  q:quit"
-	case detailView:
-		hints = "↑/↓:scroll  esc:back  q:quit"
-	}
-	right := statusBarStyle.Render(hints)
-
+	right := statusBarStyle.Render(m.statusBarHints())
 	gap := m.width - lipgloss.Width(left) - lipgloss.Width(right)
 	if gap < 0 {
 		gap = 0
@@ -485,6 +562,81 @@ func (m Model) renderStatusBar() string {
 	mid := statusBarStyle.Render(strings.Repeat(" ", gap))
 
 	return left + mid + right
+}
+
+func (m Model) statusBarLeftText() string {
+	if m.statusMsg != "" {
+		return m.statusMsg
+	}
+	if m.state == detailView || m.state == validationView {
+		if m.detailTitle != "" {
+			return m.detailTitle
+		}
+	}
+	if item, ok := m.list.SelectedItem().(ADRItem); ok {
+		return filepath.Base(item.record.Path)
+	}
+	return ""
+}
+
+func (m Model) statusBarHints() string {
+	validation := m.validationSummary()
+	if validation != "" {
+		validation += "  "
+	}
+
+	switch m.state {
+	case listView:
+		return validation + "↑/↓:nav  enter:detail  /:filter  n:new  e:edit  s:supersede  l:link  v:validate  g:generate  ?:help  q:quit"
+	case detailView, validationView:
+		return validation + "↑/↓:scroll  esc:back  q:quit"
+	case generateView:
+		return validation + "t:toc  d:graph  esc:back"
+	case helpView:
+		return validation + "any key:back"
+	default:
+		return validation
+	}
+}
+
+func (m Model) validationSummary() string {
+	if len(m.validationIssues) == 0 {
+		return "validate: clean"
+	}
+	errorCount := 0
+	for _, issue := range m.validationIssues {
+		if issue.Severity == "error" {
+			errorCount++
+		}
+	}
+	warningCount := len(m.validationIssues) - errorCount
+	return fmt.Sprintf("validate: %d issue(s) (%d error, %d warning)", len(m.validationIssues), errorCount, warningCount)
+}
+
+func formatValidationIssues(issues []adrlog.ValidationIssue) string {
+	if len(issues) == 0 {
+		return strings.Join([]string{
+			"# Validation report",
+			"",
+			"No validation issues found.",
+		}, "\n")
+	}
+
+	errorCount := 0
+	for _, issue := range issues {
+		if issue.Severity == "error" {
+			errorCount++
+		}
+	}
+	warningCount := len(issues) - errorCount
+
+	var sb strings.Builder
+	sb.WriteString("# Validation report\n\n")
+	sb.WriteString(fmt.Sprintf("Found %d issue(s): %d error(s), %d warning(s).\n\n", len(issues), errorCount, warningCount))
+	for _, issue := range issues {
+		sb.WriteString(fmt.Sprintf("- [%s] %s: %s\n", strings.ToUpper(issue.Severity), issue.Path, issue.Message))
+	}
+	return strings.TrimRight(sb.String(), "\n")
 }
 
 func Run(repo *adrlog.Repository) error {

@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"github.com/ramtinJ95/archivist/internal/adrlog"
@@ -20,5 +21,11 @@ func (i ADRItem) Description() string {
 }
 
 func (i ADRItem) FilterValue() string {
-	return i.record.Title
+	return strings.Join([]string{
+		i.record.Title,
+		i.record.Date,
+		strings.Join(i.record.Status, " "),
+		filepath.Base(i.record.Path),
+		i.record.Content,
+	}, "\n")
 }

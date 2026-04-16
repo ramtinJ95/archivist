@@ -2,6 +2,7 @@ package adrlog_test
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/ramtinJ95/archivist/internal/adrlog"
@@ -10,8 +11,8 @@ import (
 
 func TestValidate_AllValid(t *testing.T) {
 	dir := testutil.TempRepoWithADRDir(t, "doc/adr")
-	testutil.SeedADR(t, filepath.Join(dir, "doc/adr"), "0001-valid.md", testutil.SampleADR1)
-	testutil.SeedADR(t, filepath.Join(dir, "doc/adr"), "0002-valid.md", testutil.SampleADR2)
+	testutil.SeedADR(t, filepath.Join(dir, "doc/adr"), "0001-record-architecture-decisions.md", testutil.SampleADR1)
+	testutil.SeedADR(t, filepath.Join(dir, "doc/adr"), "0002-use-go-for-implementation.md", testutil.SampleADR2)
 
 	repo, err := adrlog.OpenRepository(dir)
 	if err != nil {
@@ -347,5 +348,119 @@ Some context.
 
 	if len(issues) < 2 {
 		t.Fatalf("expected at least 2 issues, got %d: %v", len(issues), issues)
+	}
+}
+
+func TestValidate_MalformedADRFilename(t *testing.T) {
+	dir := testutil.TempRepoWithADRDir(t, "doc/adr")
+	testutil.SeedADR(t, filepath.Join(dir, "doc/adr"), "decision.md", `# 4. Misnamed ADR
+
+Date: 2024-01-15
+
+## Status
+
+Accepted
+`)
+
+	repo, err := adrlog.OpenRepository(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	issues, err := repo.Validate()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	found := false
+	for _, issue := range issues {
+		if issue.Path == "doc/adr/decision.md" && issue.Message == "malformed ADR filename: expected NNNN-title.md" {
+			found = true
+			if issue.Severity != "warning" {
+				t.Errorf("expected severity 'warning', got %q", issue.Severity)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("expected malformed filename issue, got %v", issues)
+	}
+}
+
+func TestValidate_NonPaddedFilenameNumber(t *testing.T) {
+	dir := testutil.TempRepoWithADRDir(t, "doc/adr")
+	testutil.SeedADR(t, filepath.Join(dir, "doc/adr"), "1-short.md", `# 1. Short number
+
+Date: 2024-01-15
+
+## Status
+
+Accepted
+`)
+
+	repo, err := adrlog.OpenRepository(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	issues, err := repo.Validate()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	found := false
+	for _, issue := range issues {
+		if issue.Path == "doc/adr/1-short.md" && issue.Message == "filename number should be zero-padded to 4 digits, got 1" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected zero-padding warning, got %v", issues)
+	}
+}
+
+func TestValidate_AmbiguousPartialRefs(t *testing.T) {
+	dir := testutil.TempRepoWithADRDir(t, "doc/adr")
+	adrDir := filepath.Join(dir, "doc/adr")
+	testutil.SeedADR(t, adrDir, "0001-use-go-for-api.md", `# 1. Use Go for API
+
+Date: 2024-01-15
+
+## Status
+
+Accepted
+`)
+	testutil.SeedADR(t, adrDir, "0002-use-go-for-cli.md", `# 2. Use Go for CLI
+
+Date: 2024-01-16
+
+## Status
+
+Accepted
+`)
+
+	repo, err := adrlog.OpenRepository(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	issues, err := repo.Validate()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	found := false
+	for _, issue := range issues {
+		if issue.Path != "doc/adr" {
+			continue
+		}
+		if strings.Contains(issue.Message, `ambiguous partial ref "use-go-for"`) {
+			found = true
+			if !strings.Contains(issue.Message, "0001-use-go-for-api.md") || !strings.Contains(issue.Message, "0002-use-go-for-cli.md") {
+				t.Fatalf("expected ambiguous ref message to mention both ADRs, got %q", issue.Message)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("expected ambiguous partial ref warning, got %v", issues)
 	}
 }
