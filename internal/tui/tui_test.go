@@ -2,6 +2,7 @@ package tui
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -145,6 +146,12 @@ func TestGenerateViewTGeneratesTOC(t *testing.T) {
 	if result.statusMsg != "Generated TOC" {
 		t.Errorf("expected statusMsg %q, got %q", "Generated TOC", result.statusMsg)
 	}
+	if result.detailTitle != "Generated TOC" {
+		t.Fatalf("expected detailTitle %q, got %q", "Generated TOC", result.detailTitle)
+	}
+	if !strings.Contains(result.detailViewport.View(), "Architecture Decision Records") {
+		t.Fatalf("expected generated TOC content in detail viewport, got %q", result.detailViewport.View())
+	}
 }
 
 func TestGenerateViewDGeneratesGraph(t *testing.T) {
@@ -161,6 +168,48 @@ func TestGenerateViewDGeneratesGraph(t *testing.T) {
 	}
 	if result.statusMsg != "Generated DOT graph" {
 		t.Errorf("expected statusMsg %q, got %q", "Generated DOT graph", result.statusMsg)
+	}
+	if result.detailTitle != "Generated DOT graph" {
+		t.Fatalf("expected detailTitle %q, got %q", "Generated DOT graph", result.detailTitle)
+	}
+	if !strings.Contains(result.detailViewport.View(), "digraph") {
+		t.Fatalf("expected generated graph content in detail viewport, got %q", result.detailViewport.View())
+	}
+}
+
+func TestVOpensValidationView(t *testing.T) {
+	dir := testutil.TempRepoWithADRDir(t, "doc/adr")
+	adrDir := filepath.Join(dir, "doc/adr")
+	testutil.SeedADR(t, adrDir, "0001-record-architecture-decisions.md", testutil.SampleADR1)
+	testutil.SeedADR(t, adrDir, "decision.md", `# 2. Broken filename
+
+Date: 2024-01-15
+
+## Status
+
+Accepted
+`)
+
+	repo := &adrlog.Repository{CWD: dir, ADRDir: "doc/adr"}
+	records, err := loadRecords(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := NewModel(repo, records)
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	m = updated.(Model)
+
+	updated, _ = m.Update(keyMsg("v"))
+	result := updated.(Model)
+
+	if result.state != validationView {
+		t.Fatalf("expected validationView, got %d", result.state)
+	}
+	if len(result.validationIssues) == 0 {
+		t.Fatal("expected validation issues to be loaded")
+	}
+	if !strings.Contains(result.detailViewport.View(), "Validation report") {
+		t.Fatalf("expected validation report content, got %q", result.detailViewport.View())
 	}
 }
 

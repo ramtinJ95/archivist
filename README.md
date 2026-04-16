@@ -132,18 +132,20 @@ Launch the TUI from anywhere inside an ADR repository:
 archivist tui
 ```
 
-The interface provides a split-pane list and preview, a full-detail view, and
-wizard flows for create, supersede, link, and generate operations.
+The interface provides a split-pane list and preview, a full-detail view, a
+validation report, and wizard flows with previews for create, supersede, link,
+and generate operations.
 
 | Key | Action |
 |---|---|
 | `j` / `k` or arrow keys | Navigate ADRs |
 | `Enter` | Open full-detail view |
-| `/` | Filter ADRs by title |
+| `/` | Filter ADRs by title, path, or content |
 | `n` | Create a new ADR |
 | `e` | Edit the selected ADR |
 | `s` | Supersede the selected ADR |
 | `l` | Link the selected ADR |
+| `v` | Open validation report |
 | `g` | Generate TOC or graph |
 | `?` | Open help |
 | `q` | Quit |
