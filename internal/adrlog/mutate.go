@@ -6,16 +6,10 @@ import (
 	"strings"
 )
 
-func addStatusLine(path string, line string) error {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return err
-	}
-
-	content := string(data)
+func addStatusLineContent(content string, line string) (string, error) {
 	loc := statusHeadingPattern.FindStringIndex(content)
 	if loc == nil {
-		return fmt.Errorf("no ## Status heading found in %s", path)
+		return "", fmt.Errorf("no ## Status heading found")
 	}
 
 	afterHeading := content[loc[1]:]
@@ -31,21 +25,27 @@ func addStatusLine(path string, line string) error {
 	before := strings.TrimRight(content[:insertPos], "\n")
 	after := content[insertPos:]
 
-	newContent := before + "\n\n" + line + "\n\n" + after
-
-	return atomicWriteFile(path, []byte(newContent))
+	return before + "\n\n" + line + "\n\n" + after, nil
 }
 
-func removeStatusLine(path string, line string) error {
+func addStatusLine(path string, line string) error {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return err
 	}
 
-	content := string(data)
+	newContent, err := addStatusLineContent(string(data), line)
+	if err != nil {
+		return fmt.Errorf("%w in %s", err, path)
+	}
+
+	return atomicWriteFile(path, []byte(newContent))
+}
+
+func removeStatusLineContent(content string, line string) (string, error) {
 	loc := statusHeadingPattern.FindStringIndex(content)
 	if loc == nil {
-		return fmt.Errorf("no ## Status heading found in %s", path)
+		return "", fmt.Errorf("no ## Status heading found")
 	}
 
 	afterHeading := content[loc[1]:]
@@ -69,7 +69,19 @@ func removeStatusLine(path string, line string) error {
 	}
 
 	newSection := strings.Join(kept, "\n")
-	newContent := content[:loc[1]] + newSection + content[sectionEnd:]
+	return content[:loc[1]] + newSection + content[sectionEnd:], nil
+}
+
+func removeStatusLine(path string, line string) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+
+	newContent, err := removeStatusLineContent(string(data), line)
+	if err != nil {
+		return fmt.Errorf("%w in %s", err, path)
+	}
 
 	return atomicWriteFile(path, []byte(newContent))
 }
@@ -89,10 +101,45 @@ func AddLink(sourcePath, targetPath, forwardLabel, reverseLabel string) error {
 	targetBase := extractFilename(targetPath)
 
 	fwdLine := fmt.Sprintf("%s [%d. %s](%s)", forwardLabel, targetRec.Number, targetRec.Title, targetBase)
-	if err := addStatusLine(sourcePath, fwdLine); err != nil {
+	revLine := fmt.Sprintf("%s [%d. %s](%s)", reverseLabel, sourceRec.Number, sourceRec.Title, sourceBase)
+
+	sourceData, err := os.ReadFile(sourcePath)
+	if err != nil {
 		return err
 	}
 
-	revLine := fmt.Sprintf("%s [%d. %s](%s)", reverseLabel, sourceRec.Number, sourceRec.Title, sourceBase)
-	return addStatusLine(targetPath, revLine)
+	sourceUpdated, err := addStatusLineContent(string(sourceData), fwdLine)
+	if err != nil {
+		return fmt.Errorf("%w in %s", err, sourcePath)
+	}
+
+	if sourcePath == targetPath {
+		sourceUpdated, err = addStatusLineContent(sourceUpdated, revLine)
+		if err != nil {
+			return fmt.Errorf("%w in %s", err, targetPath)
+		}
+		return atomicWriteFile(sourcePath, []byte(sourceUpdated))
+	}
+
+	targetData, err := os.ReadFile(targetPath)
+	if err != nil {
+		return err
+	}
+
+	targetUpdated, err := addStatusLineContent(string(targetData), revLine)
+	if err != nil {
+		return fmt.Errorf("%w in %s", err, targetPath)
+	}
+
+	if err := atomicWriteFile(sourcePath, []byte(sourceUpdated)); err != nil {
+		return err
+	}
+	if err := atomicWriteFile(targetPath, []byte(targetUpdated)); err != nil {
+		if rollbackErr := atomicWriteFile(sourcePath, sourceData); rollbackErr != nil {
+			return fmt.Errorf("%w (rollback failed: %v)", err, rollbackErr)
+		}
+		return err
+	}
+
+	return nil
 }

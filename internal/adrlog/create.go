@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 )
@@ -95,12 +96,47 @@ func (r *Repository) CreateADR(opts CreateOptions) (string, error) {
 
 	filename := r.GenerateFilename(number, opts.Title)
 	fullPath := filepath.Join(absDir, filename)
+	relPath := filepath.Join(r.ADRDir, filename)
+	newContent := content
 
-	if err := atomicWriteFile(fullPath, []byte(content)); err != nil {
-		return "", err
+	type plannedExistingFile struct {
+		original string
+		updated  string
 	}
 
-	relPath := filepath.Join(r.ADRDir, filename)
+	plannedExistingFiles := make(map[string]*plannedExistingFile)
+
+	loadPlannedExistingFile := func(path string) (*plannedExistingFile, error) {
+		if plannedFile, ok := plannedExistingFiles[path]; ok {
+			return plannedFile, nil
+		}
+
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return nil, err
+		}
+
+		plannedFile := &plannedExistingFile{
+			original: string(data),
+			updated:  string(data),
+		}
+		plannedExistingFiles[path] = plannedFile
+		return plannedFile, nil
+	}
+
+	updatePlannedExistingFile := func(path string, update func(string) (string, error)) error {
+		plannedFile, err := loadPlannedExistingFile(path)
+		if err != nil {
+			return err
+		}
+
+		updatedContent, err := update(plannedFile.updated)
+		if err != nil {
+			return err
+		}
+		plannedFile.updated = updatedContent
+		return nil
+	}
 
 	for _, sup := range opts.Supersedes {
 		supPath, err := r.ResolveRef(sup)
@@ -118,21 +154,21 @@ func (r *Repository) CreateADR(opts CreateOptions) (string, error) {
 			return relPath, err
 		}
 
-		newRec, err := ParseRecord(fullPath)
-		if err != nil {
+		supLink := fmt.Sprintf("Superceded by [%d. %s](%s)", number, opts.Title, filename)
+		if err := updatePlannedExistingFile(absSupPath, func(current string) (string, error) {
+			return addStatusLineContent(current, supLink)
+		}); err != nil {
 			return relPath, err
 		}
-
-		supLink := fmt.Sprintf("Superceded by [%d. %s](%s)", newRec.Number, newRec.Title, filename)
-		if err := addStatusLine(absSupPath, supLink); err != nil {
-			return relPath, err
-		}
-		if err := removeStatusLine(absSupPath, "Accepted"); err != nil {
+		if err := updatePlannedExistingFile(absSupPath, func(current string) (string, error) {
+			return removeStatusLineContent(current, "Accepted")
+		}); err != nil {
 			return relPath, err
 		}
 
 		newLink := fmt.Sprintf("Supercedes [%d. %s](%s)", supRec.Number, supRec.Title, filepath.Base(supPath))
-		if err := addStatusLine(fullPath, newLink); err != nil {
+		newContent, err = addStatusLineContent(newContent, newLink)
+		if err != nil {
 			return relPath, err
 		}
 	}
@@ -153,20 +189,48 @@ func (r *Repository) CreateADR(opts CreateOptions) (string, error) {
 			return relPath, err
 		}
 
-		newRec, err := ParseRecord(fullPath)
+		fwdLine := fmt.Sprintf("%s [%d. %s](%s)", link.ForwardLabel, targetRec.Number, targetRec.Title, filepath.Base(targetPath))
+		newContent, err = addStatusLineContent(newContent, fwdLine)
 		if err != nil {
 			return relPath, err
 		}
 
-		fwdLine := fmt.Sprintf("%s [%d. %s](%s)", link.ForwardLabel, targetRec.Number, targetRec.Title, filepath.Base(targetPath))
-		if err := addStatusLine(fullPath, fwdLine); err != nil {
+		revLine := fmt.Sprintf("%s [%d. %s](%s)", link.ReverseLabel, number, opts.Title, filename)
+		if err := updatePlannedExistingFile(absTargetPath, func(current string) (string, error) {
+			return addStatusLineContent(current, revLine)
+		}); err != nil {
 			return relPath, err
 		}
+	}
 
-		revLine := fmt.Sprintf("%s [%d. %s](%s)", link.ReverseLabel, newRec.Number, newRec.Title, filename)
-		if err := addStatusLine(absTargetPath, revLine); err != nil {
+	if err := atomicWriteFile(fullPath, []byte(newContent)); err != nil {
+		return "", err
+	}
+
+	plannedPaths := make([]string, 0, len(plannedExistingFiles))
+	for path := range plannedExistingFiles {
+		plannedPaths = append(plannedPaths, path)
+	}
+	sort.Strings(plannedPaths)
+
+	appliedPaths := make([]string, 0, len(plannedPaths))
+	for _, path := range plannedPaths {
+		plannedFile := plannedExistingFiles[path]
+		if err := atomicWriteFile(path, []byte(plannedFile.updated)); err != nil {
+			rollbackErr := os.Remove(fullPath)
+			for i := len(appliedPaths) - 1; i >= 0; i-- {
+				appliedPath := appliedPaths[i]
+				appliedFile := plannedExistingFiles[appliedPath]
+				if restoreErr := atomicWriteFile(appliedPath, []byte(appliedFile.original)); rollbackErr == nil && restoreErr != nil {
+					rollbackErr = restoreErr
+				}
+			}
+			if rollbackErr != nil {
+				return relPath, fmt.Errorf("%w (rollback failed: %v)", err, rollbackErr)
+			}
 			return relPath, err
 		}
+		appliedPaths = append(appliedPaths, path)
 	}
 
 	return relPath, nil

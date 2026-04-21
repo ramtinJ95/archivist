@@ -195,3 +195,108 @@ func TestParseLinkSpecInvalid(t *testing.T) {
 		t.Fatal("expected error for invalid link spec")
 	}
 }
+
+func TestCreateADRRollsBackPlannedSupersedeMutationsOnValidationFailure(t *testing.T) {
+	dir := testutil.TempRepoWithADRDir(t, "doc/adr")
+	adrDir := filepath.Join(dir, "doc", "adr")
+
+	validTargetPath := testutil.SeedADR(t, adrDir, "0001-valid.md", testutil.SampleADR1)
+	invalidTargetPath := testutil.SeedADR(t, adrDir, "0002-invalid.md", "# 2. Invalid ADR\n\nDate: 2024-01-16\n\n## Context\n\nSome context.\n")
+
+	originalValidData, err := os.ReadFile(validTargetPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	originalInvalidData, err := os.ReadFile(invalidTargetPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	repo, err := adrlog.OpenRepository(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = repo.CreateADR(adrlog.CreateOptions{
+		Title:      "Replacement decision",
+		Date:       "2024-03-15",
+		Supersedes: []string{"1", "2"},
+	})
+	if err == nil {
+		t.Fatal("expected CreateADR to fail when a supersede target is missing ## Status")
+	}
+
+	if _, statErr := os.Stat(filepath.Join(dir, "doc/adr/0003-replacement-decision.md")); !os.IsNotExist(statErr) {
+		t.Fatalf("expected new ADR file to be absent, got stat err %v", statErr)
+	}
+
+	validData, err := os.ReadFile(validTargetPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(validData) != string(originalValidData) {
+		t.Fatalf("valid supersede target changed after failed create:\n%s", string(validData))
+	}
+
+	invalidData, err := os.ReadFile(invalidTargetPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(invalidData) != string(originalInvalidData) {
+		t.Fatalf("invalid supersede target changed after failed create:\n%s", string(invalidData))
+	}
+}
+
+func TestCreateADRRollsBackPlannedLinkMutationsOnValidationFailure(t *testing.T) {
+	dir := testutil.TempRepoWithADRDir(t, "doc/adr")
+	adrDir := filepath.Join(dir, "doc", "adr")
+
+	validTargetPath := testutil.SeedADR(t, adrDir, "0001-valid.md", testutil.SampleADR1)
+	invalidTargetPath := testutil.SeedADR(t, adrDir, "0002-invalid.md", "# 2. Invalid ADR\n\nDate: 2024-01-16\n\n## Context\n\nSome context.\n")
+
+	originalValidData, err := os.ReadFile(validTargetPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	originalInvalidData, err := os.ReadFile(invalidTargetPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	repo, err := adrlog.OpenRepository(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = repo.CreateADR(adrlog.CreateOptions{
+		Title: "Linked decision",
+		Date:  "2024-03-15",
+		Links: []adrlog.LinkSpec{
+			{Target: "1", ForwardLabel: "Amends", ReverseLabel: "Amended by"},
+			{Target: "2", ForwardLabel: "Clarifies", ReverseLabel: "Clarified by"},
+		},
+	})
+	if err == nil {
+		t.Fatal("expected CreateADR to fail when a link target is missing ## Status")
+	}
+
+	if _, statErr := os.Stat(filepath.Join(dir, "doc/adr/0003-linked-decision.md")); !os.IsNotExist(statErr) {
+		t.Fatalf("expected new ADR file to be absent, got stat err %v", statErr)
+	}
+
+	validData, err := os.ReadFile(validTargetPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(validData) != string(originalValidData) {
+		t.Fatalf("valid link target changed after failed create:\n%s", string(validData))
+	}
+
+	invalidData, err := os.ReadFile(invalidTargetPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(invalidData) != string(originalInvalidData) {
+		t.Fatalf("invalid link target changed after failed create:\n%s", string(invalidData))
+	}
+}
