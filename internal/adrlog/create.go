@@ -20,18 +20,28 @@ func Slugify(title string) string {
 }
 
 func (r *Repository) NextNumber() (int, error) {
-	files, err := r.ListFiles()
+	absDir := r.AbsADRDir()
+
+	info, err := os.Stat(absDir)
 	if err != nil {
 		return 0, err
 	}
-	if len(files) == 0 {
-		return 1, nil
+	if !info.IsDir() {
+		return 0, fmt.Errorf("%s is not a directory", r.ADRDir)
+	}
+
+	entries, err := os.ReadDir(absDir)
+	if err != nil {
+		return 0, err
 	}
 
 	maxNum := 0
-	for _, f := range files {
-		base := filepath.Base(f)
-		n := ExtractLeadingNumber(base)
+	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".md" {
+			continue
+		}
+
+		n := ExtractLeadingNumber(entry.Name())
 		if n > maxNum {
 			maxNum = n
 		}

@@ -72,6 +72,27 @@ func TestNextNumberEmptyRepo(t *testing.T) {
 	}
 }
 
+func TestNextNumberCountsMalformedNumberedMarkdownFiles(t *testing.T) {
+	dir := testutil.TempRepoWithADRDir(t, "doc/adr")
+	adrDir := filepath.Join(dir, "doc", "adr")
+
+	testutil.SeedADR(t, adrDir, "0005.md", "# 5. Existing ADR with malformed filename\n\nDate: 2024-01-15\n\n## Status\n\nAccepted\n")
+
+	repo, err := adrlog.OpenRepository(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	next, err := repo.NextNumber()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if next != 6 {
+		t.Errorf("NextNumber() = %d, want 6", next)
+	}
+}
+
 func TestGenerateFilename(t *testing.T) {
 	repo := &adrlog.Repository{CWD: "/tmp", ADRDir: "doc/adr"}
 
@@ -148,6 +169,30 @@ func TestCreateADRWithADRDateEnv(t *testing.T) {
 
 	if !strings.Contains(string(data), "Date: 2020-01-01") {
 		t.Errorf("expected ADR_DATE override, got:\n%s", string(data))
+	}
+}
+
+func TestCreateADRUsesNextNumberFromMalformedNumberedMarkdownFile(t *testing.T) {
+	dir := testutil.TempRepoWithADRDir(t, "doc/adr")
+	adrDir := filepath.Join(dir, "doc", "adr")
+	testutil.SeedADR(t, adrDir, "0005.md", "# 5. Existing ADR with malformed filename\n\nDate: 2024-01-15\n\n## Status\n\nAccepted\n")
+
+	repo, err := adrlog.OpenRepository(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	relPath, err := repo.CreateADR(adrlog.CreateOptions{
+		Title: "Use PostgreSQL",
+		Date:  "2024-03-15",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	expectedRel := filepath.Join("doc", "adr", "0006-use-postgresql.md")
+	if relPath != expectedRel {
+		t.Errorf("relPath = %q, want %q", relPath, expectedRel)
 	}
 }
 
