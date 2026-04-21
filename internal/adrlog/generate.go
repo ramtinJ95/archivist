@@ -61,6 +61,7 @@ type GraphOptions struct {
 }
 
 var relationPattern = regexp.MustCompile(`^(.+?)\s+\[(\d+)\.\s+.+?\]\((.+?)\)$`)
+var dotQuotedStringReplacer = strings.NewReplacer(`\`, `\\`, `"`, `\"`)
 
 func (r *Repository) GenerateGraph(opts GraphOptions) (string, error) {
 	files, err := r.ListFiles()
@@ -94,8 +95,8 @@ func (r *Repository) GenerateGraph(opts GraphOptions) (string, error) {
 		nodeID := fmt.Sprintf("_%d", rec.Number)
 		base := filepath.Base(rec.Path)
 		linkTarget := replaceExtension(base, ext)
-		url := opts.LinkPrefix + linkTarget
-		label := fmt.Sprintf("%d. %s", rec.Number, rec.Title)
+		url := escapeDOTQuotedString(opts.LinkPrefix + linkTarget)
+		label := escapeDOTQuotedString(fmt.Sprintf("%d. %s", rec.Number, rec.Title))
 
 		sb.WriteString(fmt.Sprintf("  %s [label=\"%s\"; URL=\"%s\"]\n", nodeID, label, url))
 	}
@@ -126,7 +127,7 @@ func (r *Repository) GenerateGraph(opts GraphOptions) (string, error) {
 
 			srcNode := fmt.Sprintf("_%d", rec.Number)
 			tgtNode := fmt.Sprintf("_%d", targetNum)
-			sb.WriteString(fmt.Sprintf("  %s -> %s [label=\"%s\", weight=0]\n", srcNode, tgtNode, label))
+			sb.WriteString(fmt.Sprintf("  %s -> %s [label=\"%s\", weight=0]\n", srcNode, tgtNode, escapeDOTQuotedString(label)))
 		}
 	}
 
@@ -137,4 +138,8 @@ func (r *Repository) GenerateGraph(opts GraphOptions) (string, error) {
 func replaceExtension(filename, newExt string) string {
 	ext := filepath.Ext(filename)
 	return filename[:len(filename)-len(ext)] + newExt
+}
+
+func escapeDOTQuotedString(value string) string {
+	return dotQuotedStringReplacer.Replace(value)
 }
