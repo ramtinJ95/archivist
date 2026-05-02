@@ -183,3 +183,37 @@ func TestAddLinkPreservesExistingContent(t *testing.T) {
 		t.Errorf("original content sections missing:\n%s", sourceContent)
 	}
 }
+
+func TestAddLinkRollsBackSourceWhenTargetUpdateFails(t *testing.T) {
+	dir := testutil.TempRepoWithADRDir(t, "doc/adr")
+	adrDir := filepath.Join(dir, "doc", "adr")
+
+	sourcePath := testutil.SeedADR(t, adrDir, "0001-source.md", testutil.SampleADR1)
+	targetPath := testutil.SeedADR(t, adrDir, "0002-target.md", "# 2. Target ADR\n\nDate: 2024-01-16\n\n## Context\n\nSome context.\n")
+
+	originalSourceData, err := os.ReadFile(sourcePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = adrlog.AddLink(sourcePath, targetPath, "Clarifies", "Clarified by")
+	if err == nil {
+		t.Fatal("expected AddLink to fail when target has no ## Status heading")
+	}
+
+	sourceData, err := os.ReadFile(sourcePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(sourceData) != string(originalSourceData) {
+		t.Fatalf("source ADR changed after failed link:\n%s", string(sourceData))
+	}
+
+	targetData, err := os.ReadFile(targetPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(targetData), "Clarified by") {
+		t.Fatalf("target ADR should not be mutated on failure:\n%s", string(targetData))
+	}
+}

@@ -200,3 +200,56 @@ Supercedes [1. First decision](0001-first-decision.md)
 		t.Errorf("graph should include forward relation:\n%s", graph)
 	}
 }
+
+func TestGenerateGraphEscapesQuotedTitlesAndLabels(t *testing.T) {
+	dir := testutil.TempRepoWithADRDir(t, "doc/adr")
+	adrDir := filepath.Join(dir, "doc", "adr")
+
+	sourceADR := `# 1. Source decision
+
+Date: 2024-01-15
+
+## Status
+
+Clarifies "why" [2. Uses "quoted" title](0002-uses-quoted-title.md)
+
+## Context
+
+## Decision
+
+## Consequences
+`
+	targetADR := `# 2. Uses "quoted" title
+
+Date: 2024-01-16
+
+## Status
+
+Accepted
+
+## Context
+
+## Decision
+
+## Consequences
+`
+	testutil.SeedADR(t, adrDir, "0001-source-decision.md", sourceADR)
+	testutil.SeedADR(t, adrDir, "0002-uses-quoted-title.md", targetADR)
+
+	repo, err := adrlog.OpenRepository(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	graph, err := repo.GenerateGraph(adrlog.GraphOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !strings.Contains(graph, `label="2. Uses \"quoted\" title"`) {
+		t.Fatalf("graph should escape quoted node labels:\n%s", graph)
+	}
+	if !strings.Contains(graph, `label="Clarifies \"why\""`) {
+		t.Fatalf("graph should escape quoted edge labels:\n%s", graph)
+	}
+}
