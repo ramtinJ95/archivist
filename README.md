@@ -205,3 +205,12 @@ To cut a release:
 go test ./...
 go build ./cmd/archivist
 ```
+
+For a local TUI smoke test that drives the Bubble Tea interface through a
+pseudo-terminal:
+
+```bash
+./scripts/tui-smoke.sh
+```
+
+This requires `expect` and is intentionally not wired into CI.
