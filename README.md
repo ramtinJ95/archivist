@@ -213,4 +213,4 @@ pseudo-terminal:
 ./scripts/tui-smoke.sh
 ```
 
-This requires `expect` and is intentionally not wired into CI.
+This requires `expect`.
