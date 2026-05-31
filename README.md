@@ -41,7 +41,27 @@ Supported platforms:
 
 ## Install
 
-### Option 1: Download a release binary
+### Option 1: Install with Homebrew
+
+On macOS or Linux, the recommended install path is the Archivist Homebrew tap:
+
+```bash
+brew install ramtinJ95/tap/archivist
+```
+
+Then verify the installed binary:
+
+```bash
+archivist version
+```
+
+To upgrade later:
+
+```bash
+brew upgrade archivist
+```
+
+### Option 2: Download a release binary
 
 Tagged binaries and checksums are published on the
 [GitHub Releases](https://github.com/ramtinJ95/archivist/releases) page.
@@ -64,7 +84,7 @@ archivist version
 
 The release page also publishes `checksums.txt` for verifying downloads.
 
-### Option 2: Install with Go
+### Option 3: Install with Go
 
 For reproducible installs, prefer an exact tag:
 
@@ -81,7 +101,7 @@ go install github.com/ramtinJ95/archivist/cmd/archivist@latest
 Make sure your Go binary directory is on `PATH`. By default this is usually
 `$HOME/go/bin` unless `GOBIN` is set.
 
-### Option 3: Build from source
+### Option 4: Build from source
 
 ```bash
 git clone https://github.com/ramtinJ95/archivist.git
