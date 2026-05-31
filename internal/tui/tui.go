@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -33,6 +34,7 @@ type Model struct {
 	detailViewport   viewport.Model
 	wizard           wizardModel
 	validationIssues []adrlog.ValidationIssue
+	validationIndex  int
 	state            viewState
 	statusMsg        string
 	detailTitle      string
@@ -196,7 +198,8 @@ func (m *Model) openSelectedDetail() {
 }
 
 func (m *Model) openValidationView() {
-	m.setDetailContent("Validation report", formatValidationIssues(m.validationIssues))
+	m.validationIndex = clampValidationIndex(m.validationIndex, len(m.validationIssues))
+	m.setDetailContent("Validation report", formatValidationIssues(m.validationIssues, m.validationIndex))
 	m.state = validationView
 	m.updateLayout()
 }
@@ -269,38 +272,56 @@ func (m Model) updateWizardView(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if err != nil {
 			m.statusMsg = fmt.Sprintf("Error: %v", err)
 		} else {
-			m.statusMsg = result
+			m.statusMsg = result.message
 		}
 
-		m.reloadRecords()
+		if result.reloadRecords || err != nil {
+			m.reloadRecords()
+		}
 		m.state = listView
+		if result.selectPath != "" {
+			m.selectByBasename(filepath.Base(result.selectPath))
+		}
 		m.updateLayout()
+		if err == nil && result.editPath != "" {
+			if editCmd := m.openEditorForPath(result.editPath); editCmd != nil {
+				return m, editCmd
+			}
+			m.statusMsg = result.message + " (set $EDITOR or $VISUAL to edit)"
+		}
 		return m, nil
 	}
 
 	return m, cmd
 }
 
-func (m *Model) openEditorForSelected() (tea.Model, tea.Cmd) {
+func (m Model) openEditorForSelected() (tea.Model, tea.Cmd) {
 	item, ok := m.list.SelectedItem().(ADRItem)
 	if !ok {
 		return m, nil
 	}
 
+	cmd := m.openEditorForPath(item.record.Path)
+	if cmd == nil {
+		m.statusMsg = "No $EDITOR or $VISUAL set"
+	}
+	return m, cmd
+}
+
+func (m Model) openEditorForPath(path string) tea.Cmd {
 	editorCmd := editor.ResolveEditor()
 	if editorCmd == "" {
-		m.statusMsg = "No $EDITOR or $VISUAL set"
-		return m, nil
+		return nil
 	}
 
-	absPath := item.record.Path
+	absPath := path
 	if !filepath.IsAbs(absPath) {
 		absPath = filepath.Join(m.repo.CWD, absPath)
 	}
 
 	c := editor.EditorCommand(editorCmd, absPath)
 
-	return m, tea.ExecProcess(c, func(err error) tea.Msg {
+	return tea.ExecProcess(c, func(err error) tea.Msg {
 		return editorFinishedMsg{err: err}
 	})
 }
@@ -340,6 +361,7 @@ func (m *Model) refreshValidationIssues() {
 		return
 	}
 	m.validationIssues = issues
+	m.validationIndex = clampValidationIndex(m.validationIndex, len(issues))
 }
 
 func (m Model) selectedBasename() string {
@@ -394,7 +416,29 @@ func (m Model) updateDetailView(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) updateValidationView(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	return m.updateDetailView(msg)
+	switch msg.String() {
+	case "q", "ctrl+c":
+		return m, tea.Quit
+	case "esc", "backspace":
+		m.state = listView
+		m.updateLayout()
+		return m, nil
+	case "up", "k":
+		m.moveValidationSelection(-1)
+		return m, nil
+	case "down", "j":
+		m.moveValidationSelection(1)
+		return m, nil
+	case "enter":
+		m.openSelectedValidationIssue()
+		return m, nil
+	case "e":
+		return m.openEditorForSelectedValidationIssue()
+	}
+
+	var cmd tea.Cmd
+	m.detailViewport, cmd = m.detailViewport.Update(msg)
+	return m, cmd
 }
 
 func (m Model) updateHelpView(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -429,6 +473,16 @@ func (m Model) updateGenerateView(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.state = detailView
 		m.updateLayout()
 		m.statusMsg = "Generated DOT graph"
+		return m, nil
+	case "T":
+		m.wizard = newGenerateTOCWizard(m.repo)
+		m.state = wizardView
+		m.statusMsg = ""
+		return m, nil
+	case "D":
+		m.wizard = newGenerateGraphWizard(m.repo)
+		m.state = wizardView
+		m.statusMsg = ""
 		return m, nil
 	case "esc", "q":
 		m.state = listView
@@ -486,15 +540,21 @@ func (m Model) renderHelpView() string {
 		{"s", "Supersede selected ADR with preview"},
 		{"l", "Link selected ADR with repo-aware target picker"},
 		{"v", "Open validation report"},
-		{"g", "Generate TOC or graph"},
+		{"g", "Generate TOC or graph preview/export"},
 		{"?", "Show this help"},
 		{"esc", "Back / Cancel filter"},
 		{"q, ctrl+c", "Quit"},
 		{"", ""},
-		{"Detail / validation view:", ""},
+		{"Detail view:", ""},
 		{"j/k, up/down", "Scroll content"},
 		{"esc, backspace", "Back to list"},
 		{"q", "Quit"},
+		{"", ""},
+		{"Validation view:", ""},
+		{"j/k, up/down", "Select issue"},
+		{"enter", "Show affected file"},
+		{"e", "Edit affected file"},
+		{"esc, backspace", "Back to list"},
 	}
 
 	var sb strings.Builder
@@ -539,6 +599,14 @@ func (m Model) renderGenerateView() string {
 	sb.WriteString(fmt.Sprintf("  %s  %s\n",
 		helpKeyStyle.Render("d"),
 		helpDescStyle.Render("Generate DOT dependency graph preview"),
+	))
+	sb.WriteString(fmt.Sprintf("  %s  %s\n",
+		helpKeyStyle.Render("T"),
+		helpDescStyle.Render("Export Table of Contents to a file"),
+	))
+	sb.WriteString(fmt.Sprintf("  %s  %s\n",
+		helpKeyStyle.Render("D"),
+		helpDescStyle.Render("Export DOT dependency graph to a file"),
 	))
 	sb.WriteString("\n")
 	sb.WriteString(helpDescStyle.Render("esc: back"))
@@ -589,9 +657,12 @@ func (m Model) statusBarHints() string {
 	case listView:
 		return validation + "↑/↓:nav  enter:detail  /:filter  n:new  e:edit  s:supersede  l:link  v:validate  g:generate  ?:help  q:quit"
 	case detailView, validationView:
+		if m.state == validationView {
+			return validation + "↑/↓:issue  enter:show  e:edit  esc:back  q:quit"
+		}
 		return validation + "↑/↓:scroll  esc:back  q:quit"
 	case generateView:
-		return validation + "t:toc  d:graph  esc:back"
+		return validation + "t/d:preview  T/D:export  esc:back"
 	case helpView:
 		return validation + "any key:back"
 	default:
@@ -613,7 +684,7 @@ func (m Model) validationSummary() string {
 	return fmt.Sprintf("validate: %d issue(s) (%d error, %d warning)", len(m.validationIssues), errorCount, warningCount)
 }
 
-func formatValidationIssues(issues []adrlog.ValidationIssue) string {
+func formatValidationIssues(issues []adrlog.ValidationIssue, selected int) string {
 	if len(issues) == 0 {
 		return strings.Join([]string{
 			"# Validation report",
@@ -633,10 +704,88 @@ func formatValidationIssues(issues []adrlog.ValidationIssue) string {
 	var sb strings.Builder
 	sb.WriteString("# Validation report\n\n")
 	sb.WriteString(fmt.Sprintf("Found %d issue(s): %d error(s), %d warning(s).\n\n", len(issues), errorCount, warningCount))
-	for _, issue := range issues {
-		sb.WriteString(fmt.Sprintf("- [%s] %s: %s\n", strings.ToUpper(issue.Severity), issue.Path, issue.Message))
+	for i, issue := range issues {
+		marker := " "
+		if i == selected {
+			marker = ">"
+		}
+		sb.WriteString(fmt.Sprintf("%s [%s] %s: %s\n", marker, strings.ToUpper(issue.Severity), issue.Path, issue.Message))
 	}
+	sb.WriteString("\nenter: show affected file  e: edit affected file  ↑/↓: select issue")
 	return strings.TrimRight(sb.String(), "\n")
+}
+
+func clampValidationIndex(index, count int) int {
+	if count <= 0 || index < 0 {
+		return 0
+	}
+	if index >= count {
+		return count - 1
+	}
+	return index
+}
+
+func (m *Model) moveValidationSelection(delta int) {
+	if len(m.validationIssues) == 0 {
+		return
+	}
+	m.validationIndex = (m.validationIndex + delta + len(m.validationIssues)) % len(m.validationIssues)
+	m.setDetailContent("Validation report", formatValidationIssues(m.validationIssues, m.validationIndex))
+}
+
+func (m *Model) selectedValidationIssue() (adrlog.ValidationIssue, bool) {
+	if len(m.validationIssues) == 0 {
+		return adrlog.ValidationIssue{}, false
+	}
+	m.validationIndex = clampValidationIndex(m.validationIndex, len(m.validationIssues))
+	return m.validationIssues[m.validationIndex], true
+}
+
+func (m *Model) selectedValidationIssuePath() (string, bool) {
+	issue, ok := m.selectedValidationIssue()
+	if !ok || filepath.Ext(issue.Path) != ".md" {
+		return "", false
+	}
+	path := issue.Path
+	if !filepath.IsAbs(path) {
+		path = filepath.Join(m.repo.CWD, path)
+	}
+	return path, true
+}
+
+func (m *Model) openSelectedValidationIssue() {
+	path, ok := m.selectedValidationIssuePath()
+	if !ok {
+		m.statusMsg = "Selected validation issue is not tied to an ADR file"
+		return
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		m.statusMsg = fmt.Sprintf("Error: %v", err)
+		return
+	}
+	issue, _ := m.selectedValidationIssue()
+	rel := issue.Path
+	if filepath.IsAbs(rel) {
+		if r, err := filepath.Rel(m.repo.CWD, rel); err == nil {
+			rel = r
+		}
+	}
+	m.selectByBasename(filepath.Base(rel))
+	m.setDetailContent("Validation issue: "+rel, fmt.Sprintf("[%s] %s\n\n%s", strings.ToUpper(issue.Severity), issue.Message, string(data)))
+}
+
+func (m Model) openEditorForSelectedValidationIssue() (tea.Model, tea.Cmd) {
+	path, ok := m.selectedValidationIssuePath()
+	if !ok {
+		m.statusMsg = "Selected validation issue is not tied to an ADR file"
+		return m, nil
+	}
+	cmd := m.openEditorForPath(path)
+	if cmd == nil {
+		m.statusMsg = "No $EDITOR or $VISUAL set"
+	}
+	return m, cmd
 }
 
 func Run(repo *adrlog.Repository) error {

@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -177,6 +178,40 @@ func TestGenerateViewDGeneratesGraph(t *testing.T) {
 	}
 }
 
+func TestGenerateViewUppercaseTOpensTOCExportWizard(t *testing.T) {
+	m := testModel(t)
+
+	updated, _ := m.Update(keyMsg("g"))
+	m = updated.(Model)
+
+	updated, _ = m.Update(keyMsg("T"))
+	result := updated.(Model)
+
+	if result.state != wizardView {
+		t.Fatalf("expected wizardView, got %d", result.state)
+	}
+	if result.wizard.kind != wizardGenerateTOC {
+		t.Fatalf("expected wizardGenerateTOC, got %d", result.wizard.kind)
+	}
+}
+
+func TestGenerateViewUppercaseDOpensGraphExportWizard(t *testing.T) {
+	m := testModel(t)
+
+	updated, _ := m.Update(keyMsg("g"))
+	m = updated.(Model)
+
+	updated, _ = m.Update(keyMsg("D"))
+	result := updated.(Model)
+
+	if result.state != wizardView {
+		t.Fatalf("expected wizardView, got %d", result.state)
+	}
+	if result.wizard.kind != wizardGenerateGraph {
+		t.Fatalf("expected wizardGenerateGraph, got %d", result.wizard.kind)
+	}
+}
+
 func TestVOpensValidationView(t *testing.T) {
 	dir := testutil.TempRepoWithADRDir(t, "doc/adr")
 	adrDir := filepath.Join(dir, "doc/adr")
@@ -210,6 +245,71 @@ Accepted
 	}
 	if !strings.Contains(result.detailViewport.View(), "Validation report") {
 		t.Fatalf("expected validation report content, got %q", result.detailViewport.View())
+	}
+	if !strings.Contains(result.detailViewport.View(), "> [WARNING]") {
+		t.Fatalf("expected selected issue marker, got %q", result.detailViewport.View())
+	}
+}
+
+func TestValidationViewNavigatesAndShowsAffectedFile(t *testing.T) {
+	dir := testutil.TempRepoWithADRDir(t, "doc/adr")
+	adrDir := filepath.Join(dir, "doc/adr")
+	testutil.SeedADR(t, adrDir, "0001-record-architecture-decisions.md", testutil.SampleADR1)
+	testutil.SeedADR(t, adrDir, "0001-use-go-for-implementation.md", testutil.SampleADR2)
+
+	repo := &adrlog.Repository{CWD: dir, ADRDir: "doc/adr"}
+	records, err := loadRecords(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := NewModel(repo, records)
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	m = updated.(Model)
+
+	updated, _ = m.Update(keyMsg("v"))
+	m = updated.(Model)
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m = updated.(Model)
+
+	if m.validationIndex != 1 {
+		t.Fatalf("expected validation index 1, got %d", m.validationIndex)
+	}
+
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	result := updated.(Model)
+
+	if result.state != validationView {
+		t.Fatalf("expected to stay in validation view, got %d", result.state)
+	}
+	if !strings.Contains(result.detailViewport.View(), "Use Go for implementation") {
+		t.Fatalf("expected affected ADR content, got %q", result.detailViewport.View())
+	}
+}
+
+func TestValidationViewEditAffectedFileRequiresEditor(t *testing.T) {
+	t.Setenv("VISUAL", "")
+	t.Setenv("EDITOR", "")
+	m := testModel(t)
+	badPath := filepath.Join(m.repo.CWD, "doc/adr/0003-broken.md")
+	if err := os.WriteFile(badPath, []byte(`# 3. Broken
+
+## Status
+
+Accepted
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m.refreshValidationIssues()
+	m.openValidationView()
+
+	updated, cmd := m.Update(keyMsg("e"))
+	result := updated.(Model)
+
+	if cmd != nil {
+		t.Fatal("expected no editor command when editor is unset")
+	}
+	if result.statusMsg != "No $EDITOR or $VISUAL set" {
+		t.Fatalf("expected editor status message, got %q", result.statusMsg)
 	}
 }
 

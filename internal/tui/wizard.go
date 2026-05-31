@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -18,7 +19,16 @@ const (
 	wizardCreate wizardKind = iota
 	wizardSupersede
 	wizardLink
+	wizardGenerateTOC
+	wizardGenerateGraph
 )
+
+type wizardResult struct {
+	message       string
+	selectPath    string
+	editPath      string
+	reloadRecords bool
+}
 
 type wizardModel struct {
 	repo              *adrlog.Repository
@@ -42,11 +52,21 @@ func newCreateWizard(repo *adrlog.Repository) wizardModel {
 	titleInput.Width = 50
 	titleInput.Focus()
 
+	supersedesInput := textinput.New()
+	supersedesInput.Placeholder = "optional, e.g. 2 or 1,3"
+	supersedesInput.CharLimit = 120
+	supersedesInput.Width = 50
+
+	linksInput := textinput.New()
+	linksInput.Placeholder = "optional, e.g. 1:Clarifies:Clarified by"
+	linksInput.CharLimit = 240
+	linksInput.Width = 70
+
 	return wizardModel{
 		repo:   repo,
 		kind:   wizardCreate,
-		inputs: []textinput.Model{titleInput},
-		labels: []string{"Title"},
+		inputs: []textinput.Model{titleInput, supersedesInput, linksInput},
+		labels: []string{"Title", "Supersedes", "Links"},
 	}
 }
 
@@ -98,6 +118,61 @@ func newLinkWizard(repo *adrlog.Repository, source *adrlog.Record, records []*ad
 	}
 	w.refreshLinkMatches()
 	return w
+}
+
+func newGenerateTOCWizard(repo *adrlog.Repository) wizardModel {
+	outputInput := textinput.New()
+	outputInput.Placeholder = filepath.Join(repo.ADRDir, "README.md")
+	outputInput.CharLimit = 240
+	outputInput.Width = 60
+	outputInput.Focus()
+
+	introInput := textinput.New()
+	introInput.Placeholder = "optional intro Markdown file"
+	introInput.CharLimit = 240
+	introInput.Width = 60
+
+	outroInput := textinput.New()
+	outroInput.Placeholder = "optional outro Markdown file"
+	outroInput.CharLimit = 240
+	outroInput.Width = 60
+
+	prefixInput := textinput.New()
+	prefixInput.Placeholder = "optional link prefix"
+	prefixInput.CharLimit = 240
+	prefixInput.Width = 60
+
+	return wizardModel{
+		repo:   repo,
+		kind:   wizardGenerateTOC,
+		inputs: []textinput.Model{outputInput, introInput, outroInput, prefixInput},
+		labels: []string{"Output path", "Intro file", "Outro file", "Link prefix"},
+	}
+}
+
+func newGenerateGraphWizard(repo *adrlog.Repository) wizardModel {
+	outputInput := textinput.New()
+	outputInput.Placeholder = filepath.Join(repo.ADRDir, "graph.dot")
+	outputInput.CharLimit = 240
+	outputInput.Width = 60
+	outputInput.Focus()
+
+	prefixInput := textinput.New()
+	prefixInput.Placeholder = "optional URL/link prefix"
+	prefixInput.CharLimit = 240
+	prefixInput.Width = 60
+
+	extInput := textinput.New()
+	extInput.Placeholder = "optional link extension, default .html"
+	extInput.CharLimit = 60
+	extInput.Width = 30
+
+	return wizardModel{
+		repo:   repo,
+		kind:   wizardGenerateGraph,
+		inputs: []textinput.Model{outputInput, prefixInput, extInput},
+		labels: []string{"Output path", "Link prefix", "Link extension"},
+	}
 }
 
 func (w *wizardModel) update(msg tea.KeyMsg) tea.Cmd {
@@ -288,6 +363,10 @@ func (w *wizardModel) confirmationSummary() string {
 		rev := strings.TrimSpace(w.inputs[2].Value())
 		return fmt.Sprintf("Link ADR %d -%s-> %s (reverse: %s)",
 			w.subjectRecord.Number, fwd, target, rev)
+	case wizardGenerateTOC:
+		return fmt.Sprintf("Export TOC to %q", strings.TrimSpace(w.inputs[0].Value()))
+	case wizardGenerateGraph:
+		return fmt.Sprintf("Export DOT graph to %q", strings.TrimSpace(w.inputs[0].Value()))
 	}
 	return ""
 }
@@ -351,6 +430,10 @@ func (w *wizardModel) title() string {
 		return fmt.Sprintf("Supersede ADR %d: %s", w.subjectRecord.Number, w.subjectRecord.Title)
 	case wizardLink:
 		return fmt.Sprintf("Link from ADR %d: %s", w.subjectRecord.Number, w.subjectRecord.Title)
+	case wizardGenerateTOC:
+		return "Export Table of Contents"
+	case wizardGenerateGraph:
+		return "Export DOT Graph"
 	default:
 		return "Wizard"
 	}
@@ -403,6 +486,10 @@ func (w *wizardModel) previewText() string {
 		return w.previewSupersedeText()
 	case wizardLink:
 		return w.previewLinkText()
+	case wizardGenerateTOC:
+		return w.previewGenerateTOCText()
+	case wizardGenerateGraph:
+		return w.previewGenerateGraphText()
 	default:
 		return ""
 	}
@@ -419,7 +506,7 @@ func (w *wizardModel) previewCreateText() string {
 		return "Unable to preview new ADR: " + err.Error()
 	}
 
-	return strings.Join([]string{
+	lines := []string{
 		fmt.Sprintf("Path: %s", relPath),
 		fmt.Sprintf("Number: %d", number),
 		fmt.Sprintf("Title: %s", title),
@@ -428,7 +515,39 @@ func (w *wizardModel) previewCreateText() string {
 		fmt.Sprintf("  + %s", relPath),
 		fmt.Sprintf("    + # %d. %s", number, title),
 		"    + Accepted",
-	}, "\n")
+	}
+
+	supersedes := parseCommaList(w.inputs[1].Value())
+	for _, ref := range supersedes {
+		if rec, err := w.repo.ResolveRecord(ref); err == nil {
+			lines = append(lines,
+				fmt.Sprintf("    + Supercedes [%d. %s](%s)", rec.Number, rec.Title, filepath.Base(rec.Path)),
+				fmt.Sprintf("  ~ %s", w.displayPath(rec.Path)),
+				"    - Accepted",
+				fmt.Sprintf("    + Superceded by [%d. %s](%s)", number, title, filepath.Base(relPath)),
+			)
+		} else {
+			lines = append(lines, fmt.Sprintf("    ! supersede %q: %v", ref, err))
+		}
+	}
+
+	links, linkErrors := parseCreateWizardLinks(w.inputs[2].Value())
+	for _, err := range linkErrors {
+		lines = append(lines, fmt.Sprintf("    ! link spec: %v", err))
+	}
+	for _, link := range links {
+		if rec, err := w.repo.ResolveRecord(link.Target); err == nil {
+			lines = append(lines,
+				fmt.Sprintf("    + %s [%d. %s](%s)", link.ForwardLabel, rec.Number, rec.Title, filepath.Base(rec.Path)),
+				fmt.Sprintf("  ~ %s", w.displayPath(rec.Path)),
+				fmt.Sprintf("    + %s [%d. %s](%s)", link.ReverseLabel, number, title, filepath.Base(relPath)),
+			)
+		} else {
+			lines = append(lines, fmt.Sprintf("    ! link target %q: %v", link.Target, err))
+		}
+	}
+
+	return strings.Join(lines, "\n")
 }
 
 func (w *wizardModel) previewSupersedeText() string {
@@ -499,6 +618,48 @@ func (w *wizardModel) previewLinkText() string {
 	}, "\n")
 }
 
+func (w *wizardModel) previewGenerateTOCText() string {
+	output := strings.TrimSpace(w.inputs[0].Value())
+	if output == "" {
+		return "Enter an output path to preview the TOC export."
+	}
+
+	toc, err := w.generateTOCContent()
+	if err != nil {
+		return "Unable to generate TOC preview: " + err.Error()
+	}
+	return previewGeneratedContent("TOC", output, toc)
+}
+
+func (w *wizardModel) previewGenerateGraphText() string {
+	output := strings.TrimSpace(w.inputs[0].Value())
+	if output == "" {
+		return "Enter an output path to preview the DOT graph export."
+	}
+
+	graph, err := w.repo.GenerateGraph(adrlog.GraphOptions{
+		LinkPrefix:    strings.TrimSpace(w.inputs[1].Value()),
+		LinkExtension: strings.TrimSpace(w.inputs[2].Value()),
+	})
+	if err != nil {
+		return "Unable to generate graph preview: " + err.Error()
+	}
+	return previewGeneratedContent("DOT graph", output, graph)
+}
+
+func previewGeneratedContent(kind, output, content string) string {
+	lines := strings.Split(strings.TrimRight(content, "\n"), "\n")
+	if len(lines) > 12 {
+		lines = append(lines[:12], fmt.Sprintf("… %d more line(s)", len(lines)-12))
+	}
+	return strings.Join(append([]string{
+		fmt.Sprintf("Output: %s", output),
+		fmt.Sprintf("Kind: %s", kind),
+		"",
+		"Preview:",
+	}, lines...), "\n")
+}
+
 func (w *wizardModel) previewNewRecordPath(title string) (int, string, error) {
 	if w.repo == nil {
 		return 0, "", fmt.Errorf("repository not loaded")
@@ -544,7 +705,7 @@ func (w *wizardModel) linkTargetRecord() (*adrlog.Record, error) {
 	return adrlog.ParseRecordStrict(absPath)
 }
 
-func (w *wizardModel) execute(repo *adrlog.Repository) (string, error) {
+func (w *wizardModel) execute(repo *adrlog.Repository) (wizardResult, error) {
 	switch w.kind {
 	case wizardCreate:
 		return w.executeCreate(repo)
@@ -552,28 +713,46 @@ func (w *wizardModel) execute(repo *adrlog.Repository) (string, error) {
 		return w.executeSupersede(repo)
 	case wizardLink:
 		return w.executeLink(repo)
+	case wizardGenerateTOC:
+		return w.executeGenerateTOC(repo)
+	case wizardGenerateGraph:
+		return w.executeGenerateGraph(repo)
 	}
-	return "", nil
+	return wizardResult{}, nil
 }
 
-func (w *wizardModel) executeCreate(repo *adrlog.Repository) (string, error) {
+func (w *wizardModel) executeCreate(repo *adrlog.Repository) (wizardResult, error) {
 	title := strings.TrimSpace(w.inputs[0].Value())
 	if title == "" {
-		return "", fmt.Errorf("title is required")
+		return wizardResult{}, fmt.Errorf("title is required")
 	}
 
-	path, err := repo.CreateADR(adrlog.CreateOptions{Title: title})
+	links, linkErrors := parseCreateWizardLinks(w.inputs[2].Value())
+	if len(linkErrors) > 0 {
+		return wizardResult{}, linkErrors[0]
+	}
+
+	path, err := repo.CreateADR(adrlog.CreateOptions{
+		Title:      title,
+		Supersedes: parseCommaList(w.inputs[1].Value()),
+		Links:      links,
+	})
 	if err != nil {
-		return "", err
+		return wizardResult{}, err
 	}
 
-	return fmt.Sprintf("Created %s", path), nil
+	return wizardResult{
+		message:       fmt.Sprintf("Created %s", path),
+		selectPath:    path,
+		editPath:      path,
+		reloadRecords: true,
+	}, nil
 }
 
-func (w *wizardModel) executeSupersede(repo *adrlog.Repository) (string, error) {
+func (w *wizardModel) executeSupersede(repo *adrlog.Repository) (wizardResult, error) {
 	title := strings.TrimSpace(w.inputs[0].Value())
 	if title == "" {
-		return "", fmt.Errorf("title is required")
+		return wizardResult{}, fmt.Errorf("title is required")
 	}
 
 	targetRef := fmt.Sprintf("%d", w.subjectRecord.Number)
@@ -582,27 +761,32 @@ func (w *wizardModel) executeSupersede(repo *adrlog.Repository) (string, error) 
 		Supersedes: []string{targetRef},
 	})
 	if err != nil {
-		return "", err
+		return wizardResult{}, err
 	}
 
-	return fmt.Sprintf("Created %s (supersedes ADR %d)", path, w.subjectRecord.Number), nil
+	return wizardResult{
+		message:       fmt.Sprintf("Created %s (supersedes ADR %d)", path, w.subjectRecord.Number),
+		selectPath:    path,
+		editPath:      path,
+		reloadRecords: true,
+	}, nil
 }
 
-func (w *wizardModel) executeLink(repo *adrlog.Repository) (string, error) {
+func (w *wizardModel) executeLink(repo *adrlog.Repository) (wizardResult, error) {
 	targetRef := strings.TrimSpace(w.inputs[0].Value())
 	fwdLabel := strings.TrimSpace(w.inputs[1].Value())
 	revLabel := strings.TrimSpace(w.inputs[2].Value())
 
 	if targetRef == "" || fwdLabel == "" || revLabel == "" {
-		return "", fmt.Errorf("all fields are required")
+		return wizardResult{}, fmt.Errorf("all fields are required")
 	}
 
 	targetRecord, err := w.linkTargetRecord()
 	if err != nil {
-		return "", err
+		return wizardResult{}, err
 	}
 	if targetRecord == nil {
-		return "", fmt.Errorf("target ADR is required")
+		return wizardResult{}, fmt.Errorf("target ADR is required")
 	}
 
 	absTargetPath := targetRecord.Path
@@ -616,8 +800,110 @@ func (w *wizardModel) executeLink(repo *adrlog.Repository) (string, error) {
 	}
 
 	if err := adrlog.AddLink(absSourcePath, absTargetPath, fwdLabel, revLabel); err != nil {
-		return "", err
+		return wizardResult{}, err
 	}
 
-	return fmt.Sprintf("Linked ADR %d -> %d", w.subjectRecord.Number, targetRecord.Number), nil
+	return wizardResult{message: fmt.Sprintf("Linked ADR %d -> %d", w.subjectRecord.Number, targetRecord.Number), reloadRecords: true}, nil
+}
+
+func (w *wizardModel) executeGenerateTOC(repo *adrlog.Repository) (wizardResult, error) {
+	output := strings.TrimSpace(w.inputs[0].Value())
+	if output == "" {
+		return wizardResult{}, fmt.Errorf("output path is required")
+	}
+	content, err := w.generateTOCContent()
+	if err != nil {
+		return wizardResult{}, err
+	}
+	if err := writeRepoRelativeFile(repo, output, []byte(content)); err != nil {
+		return wizardResult{}, err
+	}
+	return wizardResult{message: fmt.Sprintf("Exported TOC to %s", output)}, nil
+}
+
+func (w *wizardModel) executeGenerateGraph(repo *adrlog.Repository) (wizardResult, error) {
+	output := strings.TrimSpace(w.inputs[0].Value())
+	if output == "" {
+		return wizardResult{}, fmt.Errorf("output path is required")
+	}
+	content, err := repo.GenerateGraph(adrlog.GraphOptions{
+		LinkPrefix:    strings.TrimSpace(w.inputs[1].Value()),
+		LinkExtension: strings.TrimSpace(w.inputs[2].Value()),
+	})
+	if err != nil {
+		return wizardResult{}, err
+	}
+	if err := writeRepoRelativeFile(repo, output, []byte(content)); err != nil {
+		return wizardResult{}, err
+	}
+	return wizardResult{message: fmt.Sprintf("Exported DOT graph to %s", output)}, nil
+}
+
+func (w *wizardModel) generateTOCContent() (string, error) {
+	intro, err := readOptionalRepoFile(w.repo, strings.TrimSpace(w.inputs[1].Value()))
+	if err != nil {
+		return "", err
+	}
+	outro, err := readOptionalRepoFile(w.repo, strings.TrimSpace(w.inputs[2].Value()))
+	if err != nil {
+		return "", err
+	}
+	return w.repo.GenerateTOC(adrlog.TOCOptions{
+		Intro:      intro,
+		Outro:      outro,
+		LinkPrefix: strings.TrimSpace(w.inputs[3].Value()),
+	})
+}
+
+func parseCommaList(value string) []string {
+	parts := strings.Split(value, ",")
+	items := make([]string, 0, len(parts))
+	for _, part := range parts {
+		trimmed := strings.TrimSpace(part)
+		if trimmed != "" {
+			items = append(items, trimmed)
+		}
+	}
+	return items
+}
+
+func parseCreateWizardLinks(value string) ([]adrlog.LinkSpec, []error) {
+	parts := parseCommaList(value)
+	links := make([]adrlog.LinkSpec, 0, len(parts))
+	errs := make([]error, 0)
+	for _, part := range parts {
+		link, err := adrlog.ParseLinkSpec(part)
+		if err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		links = append(links, link)
+	}
+	return links, errs
+}
+
+func readOptionalRepoFile(repo *adrlog.Repository, path string) (string, error) {
+	if path == "" {
+		return "", nil
+	}
+	data, err := os.ReadFile(repoPath(repo, path))
+	if err != nil {
+		return "", err
+	}
+	return string(data), nil
+}
+
+func writeRepoRelativeFile(repo *adrlog.Repository, path string, data []byte) error {
+	absPath := repoPath(repo, path)
+	if err := os.MkdirAll(filepath.Dir(absPath), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(absPath, data, 0o644)
+}
+
+func repoPath(repo *adrlog.Repository, path string) string {
+	if filepath.IsAbs(path) {
+		return path
+	}
+	return filepath.Join(repo.CWD, path)
 }

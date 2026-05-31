@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -29,15 +30,21 @@ func wizardTestRepo(t *testing.T) (*adrlog.Repository, []*adrlog.Record) {
 	return repo, records
 }
 
-func TestCreateWizardHasSingleInput(t *testing.T) {
+func TestCreateWizardHasRichInputs(t *testing.T) {
 	repo, _ := wizardTestRepo(t)
 	w := newCreateWizard(repo)
 
-	if len(w.inputs) != 1 {
-		t.Fatalf("expected 1 input, got %d", len(w.inputs))
+	if len(w.inputs) != 3 {
+		t.Fatalf("expected 3 inputs, got %d", len(w.inputs))
 	}
 	if w.labels[0] != "Title" {
 		t.Errorf("expected label %q, got %q", "Title", w.labels[0])
+	}
+	if w.labels[1] != "Supersedes" {
+		t.Errorf("expected label %q, got %q", "Supersedes", w.labels[1])
+	}
+	if w.labels[2] != "Links" {
+		t.Errorf("expected label %q, got %q", "Links", w.labels[2])
 	}
 }
 
@@ -62,12 +69,18 @@ func typeIntoWizard(w *wizardModel, text string) {
 	}
 }
 
+func advanceWizardToConfirmation(w *wizardModel) {
+	for !w.confirming && !w.done {
+		w.update(tea.KeyMsg{Type: tea.KeyEnter})
+	}
+}
+
 func TestWizardConfirmationStep(t *testing.T) {
 	repo, _ := wizardTestRepo(t)
 	w := newCreateWizard(repo)
 	typeIntoWizard(&w, "Test")
 
-	w.update(tea.KeyMsg{Type: tea.KeyEnter})
+	advanceWizardToConfirmation(&w)
 
 	if !w.confirming {
 		t.Error("expected confirming to be true after Enter")
@@ -88,7 +101,7 @@ func TestWizardConfirmationEscGoesBack(t *testing.T) {
 	w := newCreateWizard(repo)
 	typeIntoWizard(&w, "Test")
 
-	w.update(tea.KeyMsg{Type: tea.KeyEnter})
+	advanceWizardToConfirmation(&w)
 	if !w.confirming {
 		t.Fatal("expected confirming to be true")
 	}
@@ -108,7 +121,7 @@ func TestWizardConfirmationIgnoresOtherKeys(t *testing.T) {
 	w := newCreateWizard(repo)
 	typeIntoWizard(&w, "Test")
 
-	w.update(tea.KeyMsg{Type: tea.KeyEnter})
+	advanceWizardToConfirmation(&w)
 	if !w.confirming {
 		t.Fatal("expected confirming to be true")
 	}
@@ -145,7 +158,7 @@ func TestWizardCtrlCAlwaysCancels(t *testing.T) {
 	repo, _ := wizardTestRepo(t)
 	w := newCreateWizard(repo)
 	typeIntoWizard(&w, "Test")
-	w.update(tea.KeyMsg{Type: tea.KeyEnter})
+	advanceWizardToConfirmation(&w)
 	if !w.confirming {
 		t.Fatal("expected confirming to be true")
 	}
@@ -225,6 +238,61 @@ func TestCreateWizardPreviewShowsPath(t *testing.T) {
 	}
 }
 
+func TestCreateWizardPreviewShowsSupersedeAndLinkDiffs(t *testing.T) {
+	repo, _ := wizardTestRepo(t)
+	w := newCreateWizard(repo)
+	typeIntoWizard(&w, "Use Rust instead")
+	w.update(tea.KeyMsg{Type: tea.KeyEnter})
+	typeIntoWizard(&w, "2")
+	w.update(tea.KeyMsg{Type: tea.KeyEnter})
+	typeIntoWizard(&w, "1:Clarifies:Clarified by")
+
+	preview := w.previewText()
+
+	if !strings.Contains(preview, "Superceded by [4. Use Rust instead](0004-use-rust-instead.md)") {
+		t.Fatalf("expected supersede mutation in preview, got %q", preview)
+	}
+	if !strings.Contains(preview, "Clarifies [1. Record architecture decisions](0001-record-architecture-decisions.md)") {
+		t.Fatalf("expected forward link in preview, got %q", preview)
+	}
+	if !strings.Contains(preview, "Clarified by [4. Use Rust instead](0004-use-rust-instead.md)") {
+		t.Fatalf("expected reverse link in preview, got %q", preview)
+	}
+}
+
+func TestCreateWizardExecuteSupportsSupersedesAndLinks(t *testing.T) {
+	repo, _ := wizardTestRepo(t)
+	w := newCreateWizard(repo)
+	typeIntoWizard(&w, "Use Rust instead")
+	w.update(tea.KeyMsg{Type: tea.KeyEnter})
+	typeIntoWizard(&w, "2")
+	w.update(tea.KeyMsg{Type: tea.KeyEnter})
+	typeIntoWizard(&w, "1:Clarifies:Clarified by")
+
+	result, err := w.execute(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.editPath == "" || !result.reloadRecords {
+		t.Fatalf("expected created ADR to request reload and edit, got %+v", result)
+	}
+
+	newData, err := os.ReadFile(filepath.Join(repo.CWD, "doc/adr/0004-use-rust-instead.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(newData), "Supercedes [2. Use Go for implementation](0002-use-go-for-implementation.md)") {
+		t.Fatalf("new ADR missing supersede link:\n%s", string(newData))
+	}
+	oldData, err := os.ReadFile(filepath.Join(repo.CWD, "doc/adr/0001-record-architecture-decisions.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(oldData), "Clarified by [4. Use Rust instead](0004-use-rust-instead.md)") {
+		t.Fatalf("linked ADR missing reverse link:\n%s", string(oldData))
+	}
+}
+
 func TestSupersedeWizardPreviewShowsStatusDiff(t *testing.T) {
 	repo, records := wizardTestRepo(t)
 	w := newSupersedeWizard(repo, records[1])
@@ -275,5 +343,66 @@ func TestLinkWizardArrowSelectsMatch(t *testing.T) {
 
 	if got := w.selectedLinkRecord(); got == nil || got.Number != 3 {
 		t.Fatalf("expected down arrow to select ADR 3, got %+v", got)
+	}
+}
+
+func TestGenerateTOCWizardExportsFileWithOptions(t *testing.T) {
+	repo, _ := wizardTestRepo(t)
+	introPath := filepath.Join(repo.CWD, "intro.md")
+	if err := os.WriteFile(introPath, []byte("Intro text.\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	w := newGenerateTOCWizard(repo)
+	typeIntoWizard(&w, "out/adr-readme.md")
+	w.update(tea.KeyMsg{Type: tea.KeyEnter})
+	typeIntoWizard(&w, "intro.md")
+	w.update(tea.KeyMsg{Type: tea.KeyEnter})
+	w.update(tea.KeyMsg{Type: tea.KeyEnter})
+	typeIntoWizard(&w, "docs/adr/")
+
+	preview := w.previewText()
+	if !strings.Contains(preview, "Intro text.") {
+		t.Fatalf("expected preview to include intro contents, got %q", preview)
+	}
+
+	result, err := w.execute(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(result.message, "Exported TOC") {
+		t.Fatalf("expected export message, got %+v", result)
+	}
+	data, err := os.ReadFile(filepath.Join(repo.CWD, "out/adr-readme.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), "(docs/adr/0001-record-architecture-decisions.md)") {
+		t.Fatalf("expected exported TOC to use link prefix:\n%s", string(data))
+	}
+}
+
+func TestGenerateGraphWizardExportsFileWithOptions(t *testing.T) {
+	repo, _ := wizardTestRepo(t)
+	w := newGenerateGraphWizard(repo)
+	typeIntoWizard(&w, "out/graph.dot")
+	w.update(tea.KeyMsg{Type: tea.KeyEnter})
+	typeIntoWizard(&w, "https://example.test/")
+	w.update(tea.KeyMsg{Type: tea.KeyEnter})
+	typeIntoWizard(&w, ".svg")
+
+	result, err := w.execute(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(result.message, "Exported DOT graph") {
+		t.Fatalf("expected export message, got %+v", result)
+	}
+	data, err := os.ReadFile(filepath.Join(repo.CWD, "out/graph.dot"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), "https://example.test/0001-record-architecture-decisions.svg") {
+		t.Fatalf("expected exported graph to use prefix and extension:\n%s", string(data))
 	}
 }
