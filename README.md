@@ -133,8 +133,10 @@ archivist tui
 ```
 
 The interface provides a split-pane list and preview, a full-detail view, a
-validation report, and wizard flows with previews for create, supersede, link,
-and generate operations.
+navigable validation report, and wizard flows with previews for create,
+supersede, link, and generate/export operations. TUI create flows can add
+supersede and relation links, then hand the created ADR to `$VISUAL` or
+`$EDITOR` when configured.
 
 | Key | Action |
 |---|---|
@@ -146,9 +148,14 @@ and generate operations.
 | `s` | Supersede the selected ADR |
 | `l` | Link the selected ADR |
 | `v` | Open validation report |
-| `g` | Generate TOC or graph |
+| `g` | Generate TOC or graph preview/export |
 | `?` | Open help |
 | `q` | Quit |
+
+In the generate screen, `t`/`d` preview TOC or graph output and `T`/`D` open
+export wizards for writing TOC or graph files with generation options. In the
+validation report, `j`/`k` select issues, `Enter` shows the affected ADR, and
+`e` opens the affected ADR in your editor when possible.
 
 ## `adr-tools` compatibility
 
