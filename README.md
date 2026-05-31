@@ -17,9 +17,9 @@ documentation.
 - Better validation and generation flows for operating ADRs as a living system
 - Release automation and CI suitable for shipping tagged binaries
 
-## v1.0.0 release scope
+## v1 release scope
 
-Archivist v1.0.0 is intended for day-to-day use in both existing
+Archivist v1 is intended for day-to-day use in both existing
 `adr-tools` repositories and newly initialized ADR repositories. The release
 scope is:
 
@@ -35,7 +35,7 @@ scope is:
 
 Supported platforms:
 
-- macOS and Linux are the official v1.0.0 release targets
+- macOS and Linux are the official v1 release targets
 - Windows is not yet supported because editor and pager execution still rely on
   `sh -c`
 
@@ -45,13 +45,31 @@ Supported platforms:
 
 Tagged binaries and checksums are published on the
 [GitHub Releases](https://github.com/ramtinJ95/archivist/releases) page.
+Choose the archive for your platform:
+
+| Platform | Archive |
+|---|---|
+| macOS Apple Silicon | `archivist_1.0.1_darwin_arm64.tar.gz` |
+| macOS Intel | `archivist_1.0.1_darwin_amd64.tar.gz` |
+| Linux x86-64 | `archivist_1.0.1_linux_amd64.tar.gz` |
+| Linux ARM64 | `archivist_1.0.1_linux_arm64.tar.gz` |
+
+Then unpack and place the binary on your `PATH`:
+
+```bash
+tar -xzf archivist_1.0.1_<os>_<arch>.tar.gz
+sudo install -m 0755 archivist /usr/local/bin/archivist
+archivist version
+```
+
+The release page also publishes `checksums.txt` for verifying downloads.
 
 ### Option 2: Install with Go
 
 For reproducible installs, prefer an exact tag:
 
 ```bash
-go install github.com/ramtinJ95/archivist/cmd/archivist@v1.0.0
+go install github.com/ramtinJ95/archivist/cmd/archivist@v1.0.1
 ```
 
 To track the newest published version:
@@ -59,6 +77,9 @@ To track the newest published version:
 ```bash
 go install github.com/ramtinJ95/archivist/cmd/archivist@latest
 ```
+
+Make sure your Go binary directory is on `PATH`. By default this is usually
+`$HOME/go/bin` unless `GOBIN` is set.
 
 ### Option 3: Build from source
 
@@ -201,7 +222,7 @@ The repository includes:
 - `.github/workflows/release.yml` for tag-driven GitHub releases
 - `.goreleaser.yaml` for multi-archive packaging and checksum generation
 
-To cut v1.0.0:
+To cut a release:
 
 1. Run the release checks:
 
@@ -217,8 +238,8 @@ To cut v1.0.0:
 2. Push the release tag:
 
    ```bash
-   git tag v1.0.0
-   git push origin v1.0.0
+   git tag -a vX.Y.Z -m "Release vX.Y.Z"
+   git push origin vX.Y.Z
    ```
 
 3. Let the release workflow publish binaries and checksums
@@ -226,7 +247,7 @@ To cut v1.0.0:
 
    ```bash
    archivist version
-   # archivist v1.0.0
+   # archivist vX.Y.Z
    ```
 
 ## Support
