@@ -159,7 +159,7 @@ func (r *Repository) CreateADR(opts CreateOptions) (string, error) {
 			absSupPath = filepath.Join(r.CWD, supPath)
 		}
 
-		supRec, err := ParseRecord(absSupPath)
+		supRec, err := ParseRecordStrict(absSupPath)
 		if err != nil {
 			return relPath, err
 		}
@@ -194,7 +194,7 @@ func (r *Repository) CreateADR(opts CreateOptions) (string, error) {
 			absTargetPath = filepath.Join(r.CWD, targetPath)
 		}
 
-		targetRec, err := ParseRecord(absTargetPath)
+		targetRec, err := ParseRecordStrict(absTargetPath)
 		if err != nil {
 			return relPath, err
 		}
@@ -247,8 +247,19 @@ func (r *Repository) CreateADR(opts CreateOptions) (string, error) {
 }
 
 func atomicWriteFile(path string, data []byte) error {
+	mode := os.FileMode(0o644)
+	if info, err := os.Stat(path); err == nil {
+		mode = info.Mode().Perm()
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+
 	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+	if err := os.WriteFile(tmp, data, mode); err != nil {
+		return err
+	}
+	if err := os.Chmod(tmp, mode); err != nil {
+		os.Remove(tmp)
 		return err
 	}
 	if err := os.Rename(tmp, path); err != nil {

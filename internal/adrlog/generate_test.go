@@ -85,6 +85,30 @@ func TestGenerateTOCWithLinkPrefix(t *testing.T) {
 	}
 }
 
+func TestGenerateTOCReturnsErrorForMalformedADR(t *testing.T) {
+	dir := testutil.TempRepoWithADRDir(t, "doc/adr")
+	adrDir := filepath.Join(dir, "doc", "adr")
+	testutil.SeedADR(t, adrDir, "0001-broken.md", `Date: 2024-01-15
+
+## Status
+
+Accepted
+`)
+
+	repo, err := adrlog.OpenRepository(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = repo.GenerateTOC(adrlog.TOCOptions{})
+	if err == nil {
+		t.Fatal("expected GenerateTOC to report malformed ADR")
+	}
+	if !strings.Contains(err.Error(), "missing numbered title") {
+		t.Fatalf("expected missing title error, got %v", err)
+	}
+}
+
 func TestGenerateGraph(t *testing.T) {
 	dir := testutil.TempRepoWithADRDir(t, "doc/adr")
 	adrDir := filepath.Join(dir, "doc", "adr")
@@ -116,6 +140,30 @@ func TestGenerateGraph(t *testing.T) {
 	}
 	if !strings.HasSuffix(graph, "}\n") {
 		t.Errorf("graph missing closing brace:\n%s", graph)
+	}
+}
+
+func TestGenerateGraphReturnsErrorForMalformedADR(t *testing.T) {
+	dir := testutil.TempRepoWithADRDir(t, "doc/adr")
+	adrDir := filepath.Join(dir, "doc", "adr")
+	testutil.SeedADR(t, adrDir, "0001-broken.md", `# 1. Broken ADR
+
+Date: 2024-01-15
+
+## Context
+`)
+
+	repo, err := adrlog.OpenRepository(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = repo.GenerateGraph(adrlog.GraphOptions{})
+	if err == nil {
+		t.Fatal("expected GenerateGraph to report malformed ADR")
+	}
+	if !strings.Contains(err.Error(), "missing ## Status heading") {
+		t.Fatalf("expected missing status error, got %v", err)
 	}
 }
 

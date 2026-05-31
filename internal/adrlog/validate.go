@@ -84,20 +84,30 @@ func (r *Repository) Validate() ([]ValidationIssue, error) {
 			})
 		}
 
-		if len(rec.Status) == 0 {
-			if !statusHeadingPattern.MatchString(rec.Content) {
+		hasExactStatusHeading := exactStatusHeadingPattern.MatchString(rec.Content)
+		hasReadableStatusHeading := statusHeadingPattern.MatchString(rec.Content)
+		if !hasExactStatusHeading {
+			if hasReadableStatusHeading {
+				issues = append(issues, ValidationIssue{
+					Path:     relPath,
+					Severity: "error",
+					Message:  `nonstandard status heading: expected exactly "## Status"`,
+				})
+			} else {
 				issues = append(issues, ValidationIssue{
 					Path:     relPath,
 					Severity: "error",
 					Message:  "missing ## Status heading",
 				})
-			} else {
-				issues = append(issues, ValidationIssue{
-					Path:     relPath,
-					Severity: "warning",
-					Message:  "empty status section",
-				})
 			}
+		}
+
+		if len(rec.Status) == 0 && hasReadableStatusHeading {
+			issues = append(issues, ValidationIssue{
+				Path:     relPath,
+				Severity: "warning",
+				Message:  "empty status section",
+			})
 		}
 
 		for _, statusLine := range rec.Status {

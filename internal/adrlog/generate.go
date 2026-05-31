@@ -35,9 +35,9 @@ func (r *Repository) GenerateTOC(opts TOCOptions) (string, error) {
 		if !filepath.IsAbs(f) {
 			absPath = filepath.Join(r.CWD, f)
 		}
-		rec, err := ParseRecord(absPath)
+		rec, err := ParseRecordStrict(absPath)
 		if err != nil {
-			continue
+			return "", err
 		}
 
 		base := filepath.Base(f)
@@ -80,9 +80,9 @@ func (r *Repository) GenerateGraph(opts GraphOptions) (string, error) {
 		if !filepath.IsAbs(f) {
 			absPath = filepath.Join(r.CWD, f)
 		}
-		rec, err := ParseRecord(absPath)
+		rec, err := ParseRecordStrict(absPath)
 		if err != nil {
-			continue
+			return "", err
 		}
 		records = append(records, rec)
 	}

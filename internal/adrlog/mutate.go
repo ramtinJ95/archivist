@@ -7,7 +7,7 @@ import (
 )
 
 func addStatusLineContent(content string, line string) (string, error) {
-	loc := statusHeadingPattern.FindStringIndex(content)
+	loc := exactStatusHeadingPattern.FindStringIndex(content)
 	if loc == nil {
 		return "", fmt.Errorf("no ## Status heading found")
 	}
@@ -43,7 +43,7 @@ func addStatusLine(path string, line string) error {
 }
 
 func removeStatusLineContent(content string, line string) (string, error) {
-	loc := statusHeadingPattern.FindStringIndex(content)
+	loc := exactStatusHeadingPattern.FindStringIndex(content)
 	if loc == nil {
 		return "", fmt.Errorf("no ## Status heading found")
 	}
@@ -87,12 +87,12 @@ func removeStatusLine(path string, line string) error {
 }
 
 func AddLink(sourcePath, targetPath, forwardLabel, reverseLabel string) error {
-	sourceRec, err := ParseRecord(sourcePath)
+	sourceRec, err := ParseRecordStrict(sourcePath)
 	if err != nil {
 		return err
 	}
 
-	targetRec, err := ParseRecord(targetPath)
+	targetRec, err := ParseRecordStrict(targetPath)
 	if err != nil {
 		return err
 	}

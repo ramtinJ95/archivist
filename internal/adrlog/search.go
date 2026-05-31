@@ -39,7 +39,7 @@ func (r *Repository) Search(pattern string) ([]SearchResult, error) {
 
 		data, err := os.ReadFile(absPath)
 		if err != nil {
-			continue
+			return nil, fmt.Errorf("read %s: %w", f, err)
 		}
 
 		lines := strings.Split(string(data), "\n")

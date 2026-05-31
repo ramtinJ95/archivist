@@ -1,7 +1,9 @@
 package adrlog_test
 
 import (
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/ramtinJ95/archivist/internal/adrlog"
@@ -84,6 +86,29 @@ func TestSearch_InvalidPattern(t *testing.T) {
 	_, err = repo.Search("[invalid")
 	if err == nil {
 		t.Fatal("expected error for invalid regex pattern")
+	}
+}
+
+func TestSearch_ReturnsReadErrors(t *testing.T) {
+	dir := testutil.TempRepoWithADRDir(t, "doc/adr")
+	adrDir := filepath.Join(dir, "doc/adr")
+
+	brokenPath := filepath.Join(adrDir, "0001-broken.md")
+	if err := os.Symlink("missing-target.md", brokenPath); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+
+	repo, err := adrlog.OpenRepository(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = repo.Search("anything")
+	if err == nil {
+		t.Fatal("expected search to return unreadable ADR error")
+	}
+	if !strings.Contains(err.Error(), "0001-broken.md") {
+		t.Fatalf("expected error to mention unreadable ADR, got %v", err)
 	}
 }
 

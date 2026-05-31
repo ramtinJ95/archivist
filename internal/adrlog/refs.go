@@ -79,5 +79,5 @@ func (r *Repository) ResolveRecord(ref string) (*Record, error) {
 	if !filepath.IsAbs(path) {
 		absPath = filepath.Join(r.CWD, path)
 	}
-	return ParseRecord(absPath)
+	return ParseRecordStrict(absPath)
 }
