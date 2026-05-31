@@ -122,7 +122,7 @@ func newLinkWizard(repo *adrlog.Repository, source *adrlog.Record, records []*ad
 
 func newGenerateTOCWizard(repo *adrlog.Repository) wizardModel {
 	outputInput := textinput.New()
-	outputInput.Placeholder = filepath.Join(repo.ADRDir, "README.md")
+	outputInput.Placeholder = defaultTOCOutputPath(repo)
 	outputInput.CharLimit = 240
 	outputInput.Width = 60
 	outputInput.Focus()
@@ -152,7 +152,7 @@ func newGenerateTOCWizard(repo *adrlog.Repository) wizardModel {
 
 func newGenerateGraphWizard(repo *adrlog.Repository) wizardModel {
 	outputInput := textinput.New()
-	outputInput.Placeholder = filepath.Join(repo.ADRDir, "graph.dot")
+	outputInput.Placeholder = defaultGraphOutputPath(repo)
 	outputInput.CharLimit = 240
 	outputInput.Width = 60
 	outputInput.Focus()
@@ -621,20 +621,20 @@ func (w *wizardModel) previewLinkText() string {
 func (w *wizardModel) previewGenerateTOCText() string {
 	output := strings.TrimSpace(w.inputs[0].Value())
 	if output == "" {
-		return "Enter an output path to preview the TOC export."
+		output = defaultTOCOutputPath(w.repo)
 	}
 
 	toc, err := w.generateTOCContent()
 	if err != nil {
 		return "Unable to generate TOC preview: " + err.Error()
 	}
-	return previewGeneratedContent("TOC", output, toc)
+	return previewGeneratedContent(w.repo, "TOC", output, toc)
 }
 
 func (w *wizardModel) previewGenerateGraphText() string {
 	output := strings.TrimSpace(w.inputs[0].Value())
 	if output == "" {
-		return "Enter an output path to preview the DOT graph export."
+		output = defaultGraphOutputPath(w.repo)
 	}
 
 	graph, err := w.repo.GenerateGraph(adrlog.GraphOptions{
@@ -644,17 +644,28 @@ func (w *wizardModel) previewGenerateGraphText() string {
 	if err != nil {
 		return "Unable to generate graph preview: " + err.Error()
 	}
-	return previewGeneratedContent("DOT graph", output, graph)
+	return previewGeneratedContent(w.repo, "DOT graph", output, graph)
 }
 
-func previewGeneratedContent(kind, output, content string) string {
+func previewGeneratedContent(repo *adrlog.Repository, kind, output, content string) string {
 	lines := strings.Split(strings.TrimRight(content, "\n"), "\n")
 	if len(lines) > 12 {
 		lines = append(lines[:12], fmt.Sprintf("… %d more line(s)", len(lines)-12))
 	}
+
+	action := "Action: create new file"
+	if absPath, err := repoRelativePath(repo, output); err != nil {
+		action = "Invalid output path: " + err.Error()
+	} else if _, err := os.Stat(absPath); err == nil {
+		action = "Warning: will overwrite existing file"
+	} else if !os.IsNotExist(err) {
+		action = "Warning: cannot inspect output path: " + err.Error()
+	}
+
 	return strings.Join(append([]string{
 		fmt.Sprintf("Output: %s", output),
 		fmt.Sprintf("Kind: %s", kind),
+		action,
 		"",
 		"Preview:",
 	}, lines...), "\n")
@@ -809,7 +820,7 @@ func (w *wizardModel) executeLink(repo *adrlog.Repository) (wizardResult, error)
 func (w *wizardModel) executeGenerateTOC(repo *adrlog.Repository) (wizardResult, error) {
 	output := strings.TrimSpace(w.inputs[0].Value())
 	if output == "" {
-		return wizardResult{}, fmt.Errorf("output path is required")
+		output = defaultTOCOutputPath(repo)
 	}
 	content, err := w.generateTOCContent()
 	if err != nil {
@@ -824,7 +835,7 @@ func (w *wizardModel) executeGenerateTOC(repo *adrlog.Repository) (wizardResult,
 func (w *wizardModel) executeGenerateGraph(repo *adrlog.Repository) (wizardResult, error) {
 	output := strings.TrimSpace(w.inputs[0].Value())
 	if output == "" {
-		return wizardResult{}, fmt.Errorf("output path is required")
+		output = defaultGraphOutputPath(repo)
 	}
 	content, err := repo.GenerateGraph(adrlog.GraphOptions{
 		LinkPrefix:    strings.TrimSpace(w.inputs[1].Value()),
@@ -886,7 +897,11 @@ func readOptionalRepoFile(repo *adrlog.Repository, path string) (string, error) 
 	if path == "" {
 		return "", nil
 	}
-	data, err := os.ReadFile(repoPath(repo, path))
+	absPath, err := repoRelativePath(repo, path)
+	if err != nil {
+		return "", err
+	}
+	data, err := os.ReadFile(absPath)
 	if err != nil {
 		return "", err
 	}
@@ -894,16 +909,71 @@ func readOptionalRepoFile(repo *adrlog.Repository, path string) (string, error) 
 }
 
 func writeRepoRelativeFile(repo *adrlog.Repository, path string, data []byte) error {
-	absPath := repoPath(repo, path)
+	absPath, err := repoRelativePath(repo, path)
+	if err != nil {
+		return err
+	}
 	if err := os.MkdirAll(filepath.Dir(absPath), 0o755); err != nil {
 		return err
 	}
-	return os.WriteFile(absPath, data, 0o644)
+	return atomicWriteFile(absPath, data)
 }
 
-func repoPath(repo *adrlog.Repository, path string) string {
-	if filepath.IsAbs(path) {
-		return path
+func defaultTOCOutputPath(repo *adrlog.Repository) string {
+	return filepath.Join(repo.ADRDir, "README.md")
+}
+
+func defaultGraphOutputPath(repo *adrlog.Repository) string {
+	return filepath.Join(repo.ADRDir, "graph.dot")
+}
+
+func repoRelativePath(repo *adrlog.Repository, path string) (string, error) {
+	if repo == nil {
+		return "", fmt.Errorf("repository not loaded")
 	}
-	return filepath.Join(repo.CWD, path)
+	if path == "" {
+		return "", fmt.Errorf("path is required")
+	}
+	if filepath.IsAbs(path) {
+		return "", fmt.Errorf("absolute paths are not allowed: %s", path)
+	}
+
+	base := filepath.Clean(repo.CWD)
+	candidate := filepath.Join(base, filepath.Clean(path))
+	rel, err := filepath.Rel(base, candidate)
+	if err != nil {
+		return "", err
+	}
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
+		return "", fmt.Errorf("path escapes repository: %s", path)
+	}
+	return candidate, nil
+}
+
+func atomicWriteFile(path string, data []byte) error {
+	mode := os.FileMode(0o644)
+	if info, err := os.Stat(path); err == nil {
+		mode = info.Mode().Perm()
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".archivist-*")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
+	defer os.Remove(tmpPath)
+
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := os.Chmod(tmpPath, mode); err != nil {
+		return err
+	}
+	return os.Rename(tmpPath, path)
 }

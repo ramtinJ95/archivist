@@ -382,6 +382,66 @@ func TestGenerateTOCWizardExportsFileWithOptions(t *testing.T) {
 	}
 }
 
+func TestGenerateTOCWizardUsesDefaultOutputPath(t *testing.T) {
+	repo, _ := wizardTestRepo(t)
+	w := newGenerateTOCWizard(repo)
+
+	result, err := w.execute(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(result.message, filepath.Join("doc", "adr", "README.md")) {
+		t.Fatalf("expected default output path in message, got %+v", result)
+	}
+	if _, err := os.Stat(filepath.Join(repo.CWD, "doc", "adr", "README.md")); err != nil {
+		t.Fatalf("expected default README export: %v", err)
+	}
+}
+
+func TestGeneratePreviewWarnsBeforeOverwrite(t *testing.T) {
+	repo, _ := wizardTestRepo(t)
+	if err := os.WriteFile(filepath.Join(repo.CWD, "doc", "adr", "README.md"), []byte("old\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	w := newGenerateTOCWizard(repo)
+
+	preview := w.previewText()
+
+	if !strings.Contains(preview, "Warning: will overwrite existing file") {
+		t.Fatalf("expected overwrite warning, got %q", preview)
+	}
+}
+
+func TestWriteRepoRelativeFileRejectsEscapingPaths(t *testing.T) {
+	repo, _ := wizardTestRepo(t)
+
+	if err := writeRepoRelativeFile(repo, "../outside.md", []byte("nope")); err == nil {
+		t.Fatal("expected escaping path to fail")
+	}
+	if err := writeRepoRelativeFile(repo, filepath.Join(string(filepath.Separator), "tmp", "outside.md"), []byte("nope")); err == nil {
+		t.Fatal("expected absolute path to fail")
+	}
+}
+
+func TestWriteRepoRelativeFilePreservesModeOnOverwrite(t *testing.T) {
+	repo, _ := wizardTestRepo(t)
+	target := filepath.Join(repo.CWD, "doc", "adr", "README.md")
+	if err := os.WriteFile(target, []byte("old\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := writeRepoRelativeFile(repo, filepath.Join("doc", "adr", "README.md"), []byte("new\n")); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := info.Mode().Perm(); got != 0o600 {
+		t.Fatalf("expected mode 0600 to be preserved, got %v", got)
+	}
+}
+
 func TestGenerateGraphWizardExportsFileWithOptions(t *testing.T) {
 	repo, _ := wizardTestRepo(t)
 	w := newGenerateGraphWizard(repo)
