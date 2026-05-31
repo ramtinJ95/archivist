@@ -20,15 +20,12 @@ func (r *Repository) GenerateTOC(opts TOCOptions) (string, error) {
 	}
 
 	var sb strings.Builder
-	sb.WriteString("# Architecture Decision Records\n")
+	sb.WriteString("# Architecture Decision Records\n\n")
 
 	if opts.Intro != "" {
-		sb.WriteString("\n")
 		sb.WriteString(opts.Intro)
 		sb.WriteString("\n")
 	}
-
-	sb.WriteString("\n")
 
 	for _, f := range files {
 		absPath := f
@@ -49,7 +46,6 @@ func (r *Repository) GenerateTOC(opts TOCOptions) (string, error) {
 	if opts.Outro != "" {
 		sb.WriteString("\n")
 		sb.WriteString(opts.Outro)
-		sb.WriteString("\n")
 	}
 
 	return sb.String(), nil
@@ -89,7 +85,8 @@ func (r *Repository) GenerateGraph(opts GraphOptions) (string, error) {
 
 	var sb strings.Builder
 	sb.WriteString("digraph {\n")
-	sb.WriteString("  node [shape=plaintext]\n")
+	sb.WriteString("  node [shape=plaintext];\n")
+	sb.WriteString("  subgraph {\n")
 
 	for _, rec := range records {
 		nodeID := fmt.Sprintf("_%d", rec.Number)
@@ -98,14 +95,13 @@ func (r *Repository) GenerateGraph(opts GraphOptions) (string, error) {
 		url := escapeDOTQuotedString(opts.LinkPrefix + linkTarget)
 		label := escapeDOTQuotedString(fmt.Sprintf("%d. %s", rec.Number, rec.Title))
 
-		sb.WriteString(fmt.Sprintf("  %s [label=\"%s\"; URL=\"%s\"]\n", nodeID, label, url))
+		sb.WriteString(fmt.Sprintf("    %s [label=\"%s\"; URL=\"%s\"];\n", nodeID, label, url))
+		if rec.Number > 1 {
+			prev := fmt.Sprintf("_%d", rec.Number-1)
+			sb.WriteString(fmt.Sprintf("    %s -> %s [style=\"dotted\", weight=1];\n", prev, nodeID))
+		}
 	}
-
-	for i := 0; i < len(records)-1; i++ {
-		cur := fmt.Sprintf("_%d", records[i].Number)
-		next := fmt.Sprintf("_%d", records[i+1].Number)
-		sb.WriteString(fmt.Sprintf("  %s -> %s [style=\"dotted\", weight=1]\n", cur, next))
-	}
+	sb.WriteString("  }\n")
 
 	for _, rec := range records {
 		for _, statusLine := range rec.Status {
