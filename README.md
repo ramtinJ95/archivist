@@ -205,3 +205,12 @@ To cut a release:
 go test ./...
 go build ./cmd/archivist
 ```
+
+To compare core compatibility behavior against upstream `adr-tools`:
+
+```bash
+./scripts/adr-tools-compare.sh
+```
+
+Set `ADR_TOOLS_DIR` to reuse an existing checkout, or let the script clone a
+temporary copy of `npryce/adr-tools`.
