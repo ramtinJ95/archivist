@@ -103,6 +103,30 @@ func TestWizardConfirmationEscGoesBack(t *testing.T) {
 	}
 }
 
+func TestWizardConfirmationIgnoresOtherKeys(t *testing.T) {
+	repo, _ := wizardTestRepo(t)
+	w := newCreateWizard(repo)
+	typeIntoWizard(&w, "Test")
+
+	w.update(tea.KeyMsg{Type: tea.KeyEnter})
+	if !w.confirming {
+		t.Fatal("expected confirming to be true")
+	}
+
+	w.update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")})
+	w.update(tea.KeyMsg{Type: tea.KeyTab})
+
+	if got := w.inputs[0].Value(); got != "Test" {
+		t.Fatalf("confirmation screen mutated input to %q", got)
+	}
+	if !w.confirming {
+		t.Fatal("expected to remain on confirmation screen")
+	}
+	if w.done {
+		t.Fatal("expected non-confirmation keys to leave wizard unfinished")
+	}
+}
+
 func TestWizardEscCancels(t *testing.T) {
 	repo, _ := wizardTestRepo(t)
 	w := newCreateWizard(repo)

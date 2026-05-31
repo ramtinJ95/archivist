@@ -158,6 +158,45 @@ Some context.
 	}
 }
 
+func TestValidate_NonstandardStatusHeading(t *testing.T) {
+	dir := testutil.TempRepoWithADRDir(t, "doc/adr")
+	testutil.SeedADR(t, filepath.Join(dir, "doc/adr"), "0001-nonstandard-status.md", `# 1. Nonstandard status
+
+Date: 2024-01-15
+
+##   Status
+
+Accepted
+
+## Context
+
+Some context.
+`)
+
+	repo, err := adrlog.OpenRepository(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	issues, err := repo.Validate()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	found := false
+	for _, issue := range issues {
+		if issue.Message == `nonstandard status heading: expected exactly "## Status"` {
+			found = true
+			if issue.Severity != "error" {
+				t.Fatalf("severity = %q, want error", issue.Severity)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("expected nonstandard status heading issue, got %v", issues)
+	}
+}
+
 func TestValidate_BrokenRelationTarget(t *testing.T) {
 	dir := testutil.TempRepoWithADRDir(t, "doc/adr")
 	testutil.SeedADR(t, filepath.Join(dir, "doc/adr"), "0001-with-relation.md", `# 1. ADR with relation

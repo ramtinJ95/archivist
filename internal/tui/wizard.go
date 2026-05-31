@@ -101,16 +101,25 @@ func newLinkWizard(repo *adrlog.Repository, source *adrlog.Record, records []*ad
 }
 
 func (w *wizardModel) update(msg tea.KeyMsg) tea.Cmd {
+	if w.confirming {
+		switch msg.String() {
+		case "ctrl+c":
+			w.cancelled = true
+			w.done = true
+		case "esc":
+			w.confirming = false
+		case "enter":
+			w.done = true
+		}
+		return nil
+	}
+
 	switch msg.String() {
 	case "ctrl+c":
 		w.cancelled = true
 		w.done = true
 		return nil
 	case "esc":
-		if w.confirming {
-			w.confirming = false
-			return nil
-		}
 		w.cancelled = true
 		w.done = true
 		return nil
@@ -137,10 +146,6 @@ func (w *wizardModel) update(msg tea.KeyMsg) tea.Cmd {
 		w.focusIndex = (w.focusIndex - 1 + len(w.inputs)) % len(w.inputs)
 		return w.updateFocus()
 	case "enter":
-		if w.confirming {
-			w.done = true
-			return nil
-		}
 		w.commitFocusedSelection()
 		if w.focusIndex == len(w.inputs)-1 {
 			w.confirming = true
@@ -536,7 +541,7 @@ func (w *wizardModel) linkTargetRecord() (*adrlog.Record, error) {
 	if !filepath.IsAbs(path) {
 		absPath = filepath.Join(w.repo.CWD, path)
 	}
-	return adrlog.ParseRecord(absPath)
+	return adrlog.ParseRecordStrict(absPath)
 }
 
 func (w *wizardModel) execute(repo *adrlog.Repository) (string, error) {

@@ -1,6 +1,7 @@
 package adrlog
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -10,6 +11,7 @@ import (
 
 var titlePattern = regexp.MustCompile(`^#\s+(\d+)\.\s+(.+)$`)
 var datePattern = regexp.MustCompile(`(?m)^Date:\s*(.+)$`)
+var exactStatusHeadingPattern = regexp.MustCompile(`(?m)^## Status$`)
 var statusHeadingPattern = regexp.MustCompile(`(?m)^##\s+Status\s*$`)
 var nextHeadingPattern = regexp.MustCompile(`(?m)^##\s+`)
 
@@ -21,6 +23,17 @@ func ParseRecord(path string) (*Record, error) {
 
 	content := string(data)
 	return ParseRecordFromContent(path, content)
+}
+
+func ParseRecordStrict(path string) (*Record, error) {
+	rec, err := ParseRecord(path)
+	if err != nil {
+		return nil, err
+	}
+	if err := requireRecordMetadata(rec); err != nil {
+		return nil, err
+	}
+	return rec, nil
 }
 
 func ParseRecordFromContent(path, content string) (*Record, error) {
@@ -46,6 +59,19 @@ func ParseRecordFromContent(path, content string) (*Record, error) {
 	rec.Status = extractStatusLines(content)
 
 	return rec, nil
+}
+
+func requireRecordMetadata(rec *Record) error {
+	if rec.Number == 0 || rec.Title == "" {
+		return fmt.Errorf("%s: missing numbered title", rec.Path)
+	}
+	if rec.Date == "" {
+		return fmt.Errorf("%s: missing date", rec.Path)
+	}
+	if !statusHeadingPattern.MatchString(rec.Content) {
+		return fmt.Errorf("%s: missing ## Status heading", rec.Path)
+	}
+	return nil
 }
 
 func extractStatusLines(content string) []string {

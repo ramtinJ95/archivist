@@ -150,7 +150,7 @@ func TestAddLinkFailsWithoutStatusHeading(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error when source has no ## Status heading")
 	}
-	if !strings.Contains(err.Error(), "no ## Status heading") {
+	if !strings.Contains(err.Error(), "missing ## Status heading") {
 		t.Errorf("expected error about missing Status heading, got: %v", err)
 	}
 }
@@ -215,5 +215,65 @@ func TestAddLinkRollsBackSourceWhenTargetUpdateFails(t *testing.T) {
 	}
 	if strings.Contains(string(targetData), "Clarified by") {
 		t.Fatalf("target ADR should not be mutated on failure:\n%s", string(targetData))
+	}
+}
+
+func TestAddLinkPreservesExistingFileModes(t *testing.T) {
+	dir := testutil.TempRepoWithADRDir(t, "doc/adr")
+	adrDir := filepath.Join(dir, "doc", "adr")
+
+	sourcePath := testutil.SeedADR(t, adrDir, "0001-source.md", testutil.SampleADR1)
+	targetPath := testutil.SeedADR(t, adrDir, "0002-target.md", testutil.SampleADR2)
+
+	if err := os.Chmod(sourcePath, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(targetPath, 0o640); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := adrlog.AddLink(sourcePath, targetPath, "Clarifies", "Clarified by"); err != nil {
+		t.Fatal(err)
+	}
+
+	sourceInfo, err := os.Stat(sourcePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := sourceInfo.Mode().Perm(); got != 0o600 {
+		t.Fatalf("source mode = %v, want 0600", got)
+	}
+
+	targetInfo, err := os.Stat(targetPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := targetInfo.Mode().Perm(); got != 0o640 {
+		t.Fatalf("target mode = %v, want 0640", got)
+	}
+}
+
+func TestAddLinkFailsOnNonExactStatusHeading(t *testing.T) {
+	dir := testutil.TempRepoWithADRDir(t, "doc/adr")
+	adrDir := filepath.Join(dir, "doc", "adr")
+
+	sourcePath := testutil.SeedADR(t, adrDir, "0001-source.md", `# 1. Source ADR
+
+Date: 2024-01-15
+
+##   Status
+
+Accepted
+
+## Context
+`)
+	targetPath := testutil.SeedADR(t, adrDir, "0002-target.md", testutil.SampleADR2)
+
+	err := adrlog.AddLink(sourcePath, targetPath, "Clarifies", "Clarified by")
+	if err == nil {
+		t.Fatal("expected AddLink to fail on a non-exact status heading")
+	}
+	if !strings.Contains(err.Error(), "no ## Status heading") {
+		t.Fatalf("expected exact status heading error, got %v", err)
 	}
 }

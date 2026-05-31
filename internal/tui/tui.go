@@ -663,9 +663,9 @@ func loadRecords(repo *adrlog.Repository) ([]*adrlog.Record, error) {
 		if !filepath.IsAbs(f) {
 			absPath = filepath.Join(repo.CWD, f)
 		}
-		rec, err := adrlog.ParseRecord(absPath)
+		rec, err := adrlog.ParseRecordStrict(absPath)
 		if err != nil {
-			continue
+			return nil, err
 		}
 		records = append(records, rec)
 	}
