@@ -213,6 +213,26 @@ Accepted
 	}
 }
 
+func TestLoadRecordsReturnsMalformedADRError(t *testing.T) {
+	dir := testutil.TempRepoWithADRDir(t, "doc/adr")
+	adrDir := filepath.Join(dir, "doc/adr")
+	testutil.SeedADR(t, adrDir, "0001-broken.md", `# 1. Broken ADR
+
+Date: 2024-01-15
+
+## Context
+`)
+
+	repo := &adrlog.Repository{CWD: dir, ADRDir: "doc/adr"}
+	_, err := loadRecords(repo)
+	if err == nil {
+		t.Fatal("expected malformed ADR to be surfaced")
+	}
+	if !strings.Contains(err.Error(), "missing ## Status heading") {
+		t.Fatalf("expected missing status error, got %v", err)
+	}
+}
+
 func TestQuitFromListView(t *testing.T) {
 	m := testModel(t)
 
