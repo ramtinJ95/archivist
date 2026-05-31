@@ -17,19 +17,27 @@ documentation.
 - Better validation and generation flows for operating ADRs as a living system
 - Release automation and CI suitable for shipping tagged binaries
 
-## Production readiness
+## v1.0.0 release scope
 
-Archivist is set up to ship as a product with:
+Archivist v1.0.0 is intended for day-to-day use in both existing
+`adr-tools` repositories and newly initialized ADR repositories. The release
+scope is:
 
-- repository-level compatibility as the default behavior
-- CI that runs tests, builds the CLI, and validates release config
-- tagged GitHub release automation with versioned binaries and checksums
-- version injection so `archivist version` reports the tagged release version
+- repository-level `adr-tools` compatibility as the default behavior
+- CLI workflows for init, create, list, show, search, edit, link, supersede,
+  validate, generate, and upgrade
+- an interactive TUI for browse, preview, edit, create, supersede, link,
+  validate, and generate/export workflows
+- CI and local release checks for unit tests, race tests, binary builds,
+  `adr-tools` compatibility, and scripted TUI smoke coverage
+- tagged GitHub release automation with versioned macOS/Linux binaries and
+  checksums
 
-Current limitation:
+Supported platforms:
 
-- Official release targets are macOS and Linux. Windows is not yet a supported
-  release target because editor and pager execution still rely on `sh -c`.
+- macOS and Linux are the official v1.0.0 release targets
+- Windows is not yet supported because editor and pager execution still rely on
+  `sh -c`
 
 ## Install
 
@@ -43,7 +51,7 @@ Tagged binaries and checksums are published on the
 For reproducible installs, prefer an exact tag:
 
 ```bash
-go install github.com/ramtinJ95/archivist/cmd/archivist@vX.Y.Z
+go install github.com/ramtinJ95/archivist/cmd/archivist@v1.0.0
 ```
 
 To track the newest published version:
@@ -193,11 +201,33 @@ The repository includes:
 - `.github/workflows/release.yml` for tag-driven GitHub releases
 - `.goreleaser.yaml` for multi-archive packaging and checksum generation
 
-To cut a release:
+To cut v1.0.0:
 
-1. Push a semver tag such as `v0.1.0`
-2. Let the release workflow publish binaries and checksums
-3. Verify the tagged binary reports the expected value via `archivist version`
+1. Run the release checks:
+
+   ```bash
+   go test ./...
+   go vet ./...
+   go test -race -count=1 ./...
+   go build ./cmd/archivist
+   ./scripts/adr-tools-compare.sh
+   ./scripts/tui-smoke.sh
+   ```
+
+2. Push the release tag:
+
+   ```bash
+   git tag v1.0.0
+   git push origin v1.0.0
+   ```
+
+3. Let the release workflow publish binaries and checksums
+4. Verify a tagged binary reports the expected value:
+
+   ```bash
+   archivist version
+   # archivist v1.0.0
+   ```
 
 ## Support
 
@@ -210,6 +240,8 @@ To cut a release:
 
 ```bash
 go test ./...
+go vet ./...
+go test -race -count=1 ./...
 go build ./cmd/archivist
 ```
 
