@@ -42,7 +42,7 @@ func addStatusLine(path string, line string) error {
 	return atomicWriteFile(path, []byte(newContent))
 }
 
-func removeStatusLineContent(content string, line string) (string, error) {
+func removeStatusLineContent(content string, lineToRemove string) (string, error) {
 	loc := exactStatusHeadingPattern.FindStringIndex(content)
 	if loc == nil {
 		return "", fmt.Errorf("no ## Status heading found")
@@ -59,17 +59,35 @@ func removeStatusLineContent(content string, line string) (string, error) {
 	}
 
 	section := content[loc[1]:sectionEnd]
-	lines := strings.Split(section, "\n")
-
-	var kept []string
-	for _, l := range lines {
-		if strings.TrimSpace(l) != line {
-			kept = append(kept, l)
-		}
+	headingLineBreak := ""
+	if strings.HasPrefix(section, "\n") {
+		headingLineBreak = "\n"
+		section = strings.TrimPrefix(section, "\n")
 	}
 
-	newSection := strings.Join(kept, "\n")
-	return content[:loc[1]] + newSection + content[sectionEnd:], nil
+	var newSection strings.Builder
+	newSection.WriteString(headingLineBreak)
+	afterBlank := false
+	for _, rawLine := range strings.SplitAfter(section, "\n") {
+		if rawLine == "" {
+			continue
+		}
+		line := strings.TrimSuffix(rawLine, "\n")
+		if strings.TrimSpace(line) == "" {
+			if !afterBlank {
+				newSection.WriteString(rawLine)
+			}
+			afterBlank = true
+			continue
+		}
+		if line == lineToRemove {
+			continue
+		}
+		afterBlank = false
+		newSection.WriteString(rawLine)
+	}
+
+	return content[:loc[1]] + newSection.String() + content[sectionEnd:], nil
 }
 
 func removeStatusLine(path string, line string) error {
