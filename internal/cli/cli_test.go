@@ -53,6 +53,36 @@ func TestVersionCommand(t *testing.T) {
 	}
 }
 
+func TestCurrentVersionPrefersInjectedVersion(t *testing.T) {
+	original := Version
+	Version = "v1.2.3"
+	t.Cleanup(func() { Version = original })
+
+	if got := currentVersion("v1.2.2"); got != "v1.2.3" {
+		t.Fatalf("currentVersion() = %q, want %q", got, "v1.2.3")
+	}
+}
+
+func TestCurrentVersionFallsBackToModuleVersion(t *testing.T) {
+	original := Version
+	Version = "dev"
+	t.Cleanup(func() { Version = original })
+
+	if got := currentVersion("v1.2.3"); got != "v1.2.3" {
+		t.Fatalf("currentVersion() = %q, want %q", got, "v1.2.3")
+	}
+}
+
+func TestCurrentVersionFallsBackToDevForSourceBuilds(t *testing.T) {
+	original := Version
+	Version = "dev"
+	t.Cleanup(func() { Version = original })
+
+	if got := currentVersion("(devel)"); got != "dev" {
+		t.Fatalf("currentVersion() = %q, want %q", got, "dev")
+	}
+}
+
 func TestInitCommand(t *testing.T) {
 	dir := t.TempDir()
 	chdir(t, dir)
