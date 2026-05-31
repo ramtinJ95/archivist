@@ -95,6 +95,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.statusMsg = "Editor closed"
 		}
 		m.reloadRecords()
+		if m.state == validationView {
+			m.setValidationReportContent()
+		}
 		return m, nil
 
 	case tea.KeyMsg:
@@ -198,8 +201,7 @@ func (m *Model) openSelectedDetail() {
 }
 
 func (m *Model) openValidationView() {
-	m.validationIndex = clampValidationIndex(m.validationIndex, len(m.validationIssues))
-	m.setDetailContent("Validation report", formatValidationIssues(m.validationIssues, m.validationIndex))
+	m.setValidationReportContent()
 	m.state = validationView
 	m.updateLayout()
 }
@@ -730,7 +732,26 @@ func (m *Model) moveValidationSelection(delta int) {
 		return
 	}
 	m.validationIndex = (m.validationIndex + delta + len(m.validationIssues)) % len(m.validationIssues)
+	m.setValidationReportContent()
+}
+
+func (m *Model) setValidationReportContent() {
+	m.validationIndex = clampValidationIndex(m.validationIndex, len(m.validationIssues))
 	m.setDetailContent("Validation report", formatValidationIssues(m.validationIssues, m.validationIndex))
+	m.scrollSelectedValidationIssueIntoView()
+}
+
+func (m *Model) scrollSelectedValidationIssueIntoView() {
+	if len(m.validationIssues) == 0 || m.detailViewport.Height <= 0 {
+		return
+	}
+	const issueListStartLine = 4
+	issueLine := issueListStartLine + m.validationIndex
+	offset := issueLine - m.detailViewport.Height/2
+	if offset < 0 {
+		offset = 0
+	}
+	m.detailViewport.YOffset = offset
 }
 
 func (m *Model) selectedValidationIssue() (adrlog.ValidationIssue, bool) {

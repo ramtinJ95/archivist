@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -283,6 +284,74 @@ func TestValidationViewNavigatesAndShowsAffectedFile(t *testing.T) {
 	}
 	if !strings.Contains(result.detailViewport.View(), "Use Go for implementation") {
 		t.Fatalf("expected affected ADR content, got %q", result.detailViewport.View())
+	}
+}
+
+func TestValidationViewKeepsSelectedIssueVisible(t *testing.T) {
+	m := testModel(t)
+	m.validationIssues = nil
+	for i := 0; i < 20; i++ {
+		m.validationIssues = append(m.validationIssues, adrlog.ValidationIssue{
+			Path:     filepath.Join("doc", "adr", "0001-record-architecture-decisions.md"),
+			Severity: "warning",
+			Message:  fmt.Sprintf("issue %02d", i),
+		})
+	}
+	m.openValidationView()
+	m.detailViewport.Height = 6
+
+	for i := 0; i < 12; i++ {
+		m.moveValidationSelection(1)
+	}
+
+	if m.detailViewport.YOffset == 0 {
+		t.Fatal("expected validation viewport to scroll as selection moves")
+	}
+	if !strings.Contains(m.detailViewport.View(), "> [WARNING] doc/adr/0001-record-architecture-decisions.md: issue 12") {
+		t.Fatalf("expected selected issue to remain visible, got %q", m.detailViewport.View())
+	}
+}
+
+func TestValidationViewRefreshesAfterEditorCloses(t *testing.T) {
+	dir := testutil.TempRepoWithADRDir(t, "doc/adr")
+	adrDir := filepath.Join(dir, "doc/adr")
+	testutil.SeedADR(t, adrDir, "0001-record-architecture-decisions.md", testutil.SampleADR1)
+	badPath := filepath.Join(adrDir, "decision.md")
+	if err := os.WriteFile(badPath, []byte(`# 2. Broken filename
+
+Date: 2024-01-15
+
+## Status
+
+Accepted
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	repo := &adrlog.Repository{CWD: dir, ADRDir: "doc/adr"}
+	records, err := loadRecords(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := NewModel(repo, records)
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 20})
+	m = updated.(Model)
+	m.openValidationView()
+	if !strings.Contains(m.detailViewport.View(), "malformed ADR filename") {
+		t.Fatalf("expected initial validation issue, got %q", m.detailViewport.View())
+	}
+	if err := os.Remove(badPath); err != nil {
+		t.Fatal(err)
+	}
+
+	updated, _ = m.Update(editorFinishedMsg{})
+	m = updated.(Model)
+
+	if m.state != validationView {
+		t.Fatalf("expected to remain in validation view, got %d", m.state)
+	}
+	if !strings.Contains(m.detailViewport.View(), "No validation issues found.") {
+		t.Fatalf("expected refreshed validation report, got %q", m.detailViewport.View())
 	}
 }
 
