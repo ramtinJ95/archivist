@@ -221,3 +221,12 @@ To compare core compatibility behavior against upstream `adr-tools`:
 
 Set `ADR_TOOLS_DIR` to reuse an existing checkout, or let the script clone a
 temporary copy of `npryce/adr-tools`.
+
+To run an end-to-end scripted smoke test of the interactive TUI workflows:
+
+```bash
+./scripts/tui-smoke.sh
+```
+
+Set `KEEP_TUI_SMOKE_TMP=1` to keep the generated temporary repository for
+inspection after the smoke test finishes.
